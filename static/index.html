@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>福井大学 | 研究連携サポート</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- LOGIN OVERLAY SCREEN -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="brand-logo" aria-hidden="true">
+          <span class="sq sq-1"></span>
+          <span class="sq sq-2"></span>
+        </div>
+        <span class="brand-univ">福井大学</span>
+        <span class="brand-divider">|</span>
+        <span class="brand-title">研究連携サポート</span>
+      </div>
+      <p class="login-subtitle">あなたの研究データ（DB）をもとに共同研究者・公募・貸出機器をAI提案</p>
+
+      <div class="login-tabs">
+        <button id="tab-btn-login" class="login-tab active" onclick="switchAuthTab('login')">ログイン</button>
+        <button id="tab-btn-register" class="login-tab" onclick="switchAuthTab('register')">新規アカウント登録</button>
+      </div>
+
+      <p id="auth-error-msg" class="auth-error hidden"></p>
+
+      <!-- Login Form -->
+      <form id="form-login" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="login-email">学内メールアドレス</label>
+          <input id="login-email" type="email" class="form-input" value="honda@u-fukui.ac.jp" placeholder="example@u-fukui.ac.jp" required />
+        </div>
+        <div class="form-group mt-12">
+          <label class="form-label" for="login-password">パスワード</label>
+          <input id="login-password" type="password" class="form-input" value="fukui2026" placeholder="••••••••" required />
+        </div>
+        <p class="helper-caption" style="text-align:left;margin-top:6px;">※ 初期デモ（本田 知己 教授・DB連携済）：そのままログインボタンを押せます</p>
+        <button type="submit" class="primary-cta-btn mt-12">ログインして始める</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="form-register" class="hidden" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label class="form-label" for="reg-name">氏名（福井大学DBの研究者情報と自動照合します）</label>
+          <input id="reg-name" type="text" class="form-input" placeholder="例：山次 俊介 / 藤元 美俊 / 五井 孝憲" oninput="onInputRegisterName(this.value)" required autocomplete="off" />
+          <input id="reg-researcher-id" type="hidden" value="" />
+          <div id="reg-name-suggestions" class="name-suggestions-box hidden"></div>
+          <div id="reg-db-match-banner" class="db-match-banner hidden"></div>
+        </div>
+        <div class="form-row-2col mt-10">
+          <div class="form-group">
+            <label class="form-label" for="reg-dept">所属系・学部</label>
+            <input id="reg-dept" type="text" class="form-input" value="工学系部門" placeholder="例：工学系部門・教育学部" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-role">役職・区分</label>
+            <input id="reg-role" type="text" class="form-input" value="教授" placeholder="例：教授・准教授" />
+          </div>
+        </div>
+        <div class="form-group mt-10">
+          <label class="form-label" for="reg-email">学内メールアドレス</label>
+          <input id="reg-email" type="email" class="form-input" placeholder="example@u-fukui.ac.jp" required />
+        </div>
+        <div class="form-group mt-10">
+          <label class="form-label" for="reg-password">パスワード</label>
+          <input id="reg-password" type="password" class="form-input" placeholder="任意のパスワード" required />
+        </div>
+        <button type="submit" class="primary-cta-btn mt-16">アカウントを登録してAI検索を開始</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="top-header">
+    <div class="header-left">
+      <div class="brand-logo" aria-hidden="true">
+        <span class="sq sq-1"></span>
+        <span class="sq sq-2"></span>
+      </div>
+      <span class="brand-univ">福井大学</span>
+      <span class="brand-divider">|</span>
+      <span class="brand-title">研究連携サポート</span>
+    </div>
+    <div class="header-right">
+      <button class="header-history-btn" onclick="switchView('history')">
+        <span>🕒 相談履歴</span>
+        <span id="header-history-count" class="history-count-badge">0</span>
+      </button>
+      <button class="header-like-btn" onclick="switchView('likes')">
+        <span>♥ いいね済み</span>
+        <span id="header-likes-count" class="like-count-badge">0</span>
+      </button>
+      <div class="user-profile-pill">
+        <span id="header-user-label">👤 本田 知己（工学系）</span>
+        <button class="logout-mini-btn" onclick="handleLogout()" title="ログアウト・アカウント切替">ログアウト</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="search" onclick="switchView('search')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span>研究連携を探す</span>
+        </button>
+        <button class="nav-item" data-view="likes" onclick="switchView('likes')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span>いいね一覧</span>
+          <span id="sidebar-likes-count" class="nav-count-pill">0</span>
+        </button>
+        <button class="nav-item" data-view="history" onclick="switchView('history')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>相談結果履歴</span>
+          <span id="sidebar-history-count" class="nav-count-pill blue">0</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Area -->
+    <main class="main-content">
+      <!-- VIEW 1: 研究連携を探す -->
+      <section id="view-search" class="view-section active">
+        <div class="view-header-row">
+          <div>
+            <h1 class="page-title">共同研究者・公募・貸出機器を探す</h1>
+            <p class="page-subtitle">あなたのDB研究情報と入力した研究内容をもとに、DeepSeek AIが共同研究者（5名）・合う公募・使える貸出機器を提案します。</p>
+          </div>
+          <div class="result-jump-pills">
+            <a href="#section-researchers" id="jump-researchers" class="jump-pill">👤 共同研究者 <strong id="jump-r-count">5名</strong></a>
+            <a href="#section-grants" id="jump-grants" class="jump-pill">📄 おすすめの公募 <strong id="jump-g-count">3件</strong></a>
+            <a href="#section-equipment" id="jump-equipment" class="jump-pill">🔬 貸出機器 <strong id="jump-e-count">4件</strong></a>
+          </div>
+        </div>
+
+        <div class="workspace-grid">
+          <!-- Left Column: User DB Profile + Input Form -->
+          <div class="panel-card sticky-panel">
+            <!-- Logged-in User's DB Researcher Card -->
+            <div id="my-db-profile-box" class="my-db-profile-box mb-14"></div>
+
+            <h2 class="panel-title">1. 探したい項目を選ぶ</h2>
+            <p class="panel-subcaption">両方選ぶと、研究者・公募・貸出機器をまとめて提案します。</p>
+
+            <div class="item-toggle-list mt-10">
+              <label class="item-toggle-card selected" id="card-chk-researchers">
+                <input type="checkbox" id="chk-researchers" checked onchange="onToggleCheckCard()" />
+                <div class="toggle-card-body">
+                  <div class="toggle-card-title">👤 共同研究者 ＋ 📄 公募を探す</div>
+                  <div class="toggle-card-desc">自分の研究と相乗効果のある研究者5名と、合う公募（3件）を提案します</div>
+                </div>
+              </label>
+
+              <label class="item-toggle-card selected" id="card-chk-equipment">
+                <input type="checkbox" id="chk-equipment" checked onchange="onToggleCheckCard()" />
+                <div class="toggle-card-body">
+                  <div class="toggle-card-title">🔬 貸出機器を探す</div>
+                  <div class="toggle-card-desc">自分の研究や今回のテーマに使えそうな学内の貸出機器を提案します</div>
+                </div>
+              </label>
+            </div>
+
+            <div class="form-group mt-16">
+              <label class="form-label" for="research-input">2. 研究内容を入力（自分の専門と掛け合わせたいテーマ等）</label>
+              <textarea id="research-input" class="form-textarea" rows="4" placeholder="例：センサーデータによる行動変化の解析、ナノ材料の表面構造評価など">センサーデータと機械学習を用いた状態監視・予防システムの開発</textarea>
+            </div>
+
+            <div class="sample-chips mt-10">
+              <span class="sample-label">入力例：</span>
+              <button type="button" class="chip-btn" onclick="setSampleQuery('センサーデータと機械学習を用いた状態監視・予防システムの開発')">センサー×状態監視</button>
+              <button type="button" class="chip-btn" onclick="setSampleQuery('ナノ薄膜・複合材料の表面微細構造解析と摩擦摩耗評価')">ナノ材料・表面解析</button>
+              <button type="button" class="chip-btn" onclick="setSampleQuery('消化器癌・腫瘍の分子イメージングと光線力学的治療の医工連携研究')">がんイメージング×医工連携</button>
+              <button type="button" class="chip-btn" onclick="setSampleQuery('積雪・路面状態の予測モデルとワイヤレス通信を用いた防災システム')">積雪防災×通信システム</button>
+            </div>
+
+            <button id="btn-run-search" class="primary-cta-btn mt-16" onclick="runAISearch(false)">
+              AIで提案する
+            </button>
+            <p class="helper-caption">提案結果は自動で「相談結果履歴」に保存されます。気になる候補は「♡ いいね」で保存できます。</p>
+          </div>
+
+          <!-- Right Area: Side-by-Side Results -->
+          <div id="results-dual-grid" class="results-dual-grid">
+            <!-- Column 1: 共同研究者 5名 -->
+            <div id="section-researchers" class="panel-card">
+              <div class="panel-header-flex">
+                <div>
+                  <div class="panel-title-group">
+                    <h2 class="panel-title">👤 共同研究者の候補</h2>
+                    <span id="count-researchers" class="count-highlight">5名</span>
+                  </div>
+                  <p class="panel-subcaption">あなたのDB研究情報と研究内容をもとにAIが提案した候補です。</p>
+                </div>
+              </div>
+              <div id="list-researchers" class="cards-stack"></div>
+            </div>
+
+            <!-- Column 2: おすすめの公募 + 貸出機器 -->
+            <div id="right-side-stack" class="right-side-stack">
+              <!-- Section B: 合う公募 -->
+              <div id="section-grants" class="panel-card">
+                <div class="panel-header-flex">
+                  <div>
+                    <div class="panel-title-group">
+                      <h2 class="panel-title">📄 おすすめの公募</h2>
+                      <span id="count-grants" class="count-highlight">3件</span>
+                    </div>
+                    <p class="panel-subcaption">あなたと共同研究者の専門・研究内容に合う公募を提案します。</p>
+                  </div>
+                </div>
+                <div id="list-grants" class="cards-stack"></div>
+              </div>
+
+              <!-- Section C: 貸出機器 -->
+              <div id="section-equipment" class="panel-card">
+                <div class="panel-header-flex">
+                  <div>
+                    <div class="panel-title-group">
+                      <h2 class="panel-title">🔬 研究に使えそうな貸出機器</h2>
+                      <span id="count-equipment" class="count-highlight">4件</span>
+                    </div>
+                    <p class="panel-subcaption">福井大学の機器マスタ（125件）から、研究内容に合う機器を提案します。</p>
+                  </div>
+                  <select id="eq-user-category" class="form-select-sm" onchange="runAISearch(false)">
+                    <option value="学内" selected>料金区分：学内</option>
+                    <option value="教育研究機関">料金区分：教育研究機関</option>
+                    <option value="一般企業">料金区分：一般企業</option>
+                    <option value="依頼分析">料金区分：依頼分析</option>
+                  </select>
+                </div>
+                <div id="list-equipment" class="cards-stack"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: いいね一覧 -->
+      <section id="view-likes" class="view-section">
+        <div class="view-header-row">
+          <div>
+            <h1 class="page-title">♥ いいねした候補一覧</h1>
+            <p class="page-subtitle">「いいね」を押して保存した共同研究者・公募・貸出機器をいつでも見返せます。</p>
+          </div>
+          <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all" onclick="filterLikes('all')">すべて</button>
+            <button class="filter-tab" data-filter="researcher" onclick="filterLikes('researcher')">共同研究者</button>
+            <button class="filter-tab" data-filter="grant" onclick="filterLikes('grant')">公募</button>
+            <button class="filter-tab" data-filter="equipment" onclick="filterLikes('equipment')">貸出機器</button>
+          </div>
+        </div>
+
+        <div id="likes-container" class="cards-stack"></div>
+      </section>
+
+      <!-- VIEW 3: 相談結果履歴 -->
+      <section id="view-history" class="view-section">
+        <div class="view-header-row">
+          <div>
+            <h1 class="page-title">🕒 相談結果履歴</h1>
+            <p class="page-subtitle">過去に検索・相談した研究内容と、そのときAIが提案した共同研究者・公募・貸出機器の履歴です。</p>
+          </div>
+          <button class="outline-action-btn" onclick="clearAllHistory()">履歴をすべてクリア</button>
+        </div>
+
+        <div id="history-container" class="cards-stack"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: 研究者詳細 -->
+  <div id="modal-researcher-detail" class="modal-backdrop hidden" onclick="if(event.target===this) closeModal('modal-researcher-detail')">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <h3 id="modal-r-title" class="modal-title">研究者詳細</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-researcher-detail')">✕</button>
+      </div>
+      <div id="modal-r-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast-box" class="toast-box hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

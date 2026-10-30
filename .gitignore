@@ -1,0 +1,11 @@
+# Local SQLite DB (contains local user settings / API key — never commit to GitHub!)
+fukui_matching.db
+fukui_matching.db-journal
+
+# Original large Excel file & local helper scripts
+FukuiMatchingDB.xlsx
+*.webp
+__pycache__/
+*.pyc
+.env
+.vercel
