@@ -128,6 +128,23 @@ function selectRegisterResearcher(encoded) {
   banner.innerHTML = `<strong>✓ 福井大学DBの研究者データと連携しました</strong><br>専門・キーワード：${escapeHtml(kws)}`;
 }
 
+function getIntentBadgeHtml(intentStr) {
+  const s = intentStr || '未確認';
+  if (s.includes('積極的')) {
+    return `<span class="intent-status-pill green">🟢 参加意向：${escapeHtml(s)}</span>`;
+  }
+  if (s.includes('テーマが合えば') || s.includes('相談可能')) {
+    return `<span class="intent-status-pill blue">🔵 参加意向：${escapeHtml(s)}</span>`;
+  }
+  if (s.includes('機器') || s.includes('学内連携')) {
+    return `<span class="intent-status-pill amber">🟡 参加意向：${escapeHtml(s)}</span>`;
+  }
+  if (s.includes('多忙') || s.includes('停止')) {
+    return `<span class="intent-status-pill gray">⚪ 参加意向：${escapeHtml(s)}</span>`;
+  }
+  return `<span>👤 参加意向：${escapeHtml(s)}</span>`;
+}
+
 function applyLoggedInUser(user) {
   state.user = user;
   localStorage.setItem('fukui_matching_user', JSON.stringify(user));
@@ -142,21 +159,26 @@ function renderMyDbProfileBox(user) {
     box.innerHTML = '';
     return;
   }
+  const intentHtml = getIntentBadgeHtml(user.intent_status || '積極的に参加したい（共同研究・公募連携を歓迎）');
   if (user.db_matched) {
     const kws = (user.keywords || []).slice(0, 5);
     box.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
         <div>
           <span class="type-badge" style="background:#dcfce7;color:#166534;">✓ DB研究情報と連携中</span>
-          <div style="font-size:15.5px;font-weight:800;margin-top:4px;">${escapeHtml(user.name)}</div>
+          <div style="font-size:15.5px;font-weight:800;margin-top:4px;">${escapeHtml(user.name)} <span style="font-size:12px;font-weight:600;color:#475569;">（${escapeHtml(user.role || '研究者')}）</span></div>
         </div>
-        ${
-          user.researcher_id
-            ? `<button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="openResearcherDetail('${escapeHtml(user.researcher_id)}')">自分のDB情報</button>`
-            : ''
-        }
+        <div style="display:flex;gap:6px;">
+          ${
+            user.researcher_id
+              ? `<button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="openResearcherDetail('${escapeHtml(user.researcher_id)}')">自分のDB情報</button>`
+              : ''
+          }
+          <button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="switchView('account')">参加意向・管理</button>
+        </div>
       </div>
       <div style="font-size:12px;color:#475569;margin-top:2px;">${escapeHtml(user.department)}</div>
+      <div style="margin-top:6px;">${intentHtml}</div>
       ${
         kws.length
           ? `<div class="keyword-pills mt-8">${kws.map((k) => `<span class="kw-pill">${escapeHtml(k)}</span>`).join('')}</div>`
@@ -168,8 +190,12 @@ function renderMyDbProfileBox(user) {
     `;
   } else {
     box.innerHTML = `
-      <div style="font-size:14px;font-weight:800;">👤 ${escapeHtml(user.name)}（${escapeHtml(user.department)}）</div>
-      <div style="font-size:12px;color:#64748b;margin-top:2px;">入力された研究内容をもとにDeepSeekが検索します。</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="font-size:14px;font-weight:800;">👤 ${escapeHtml(user.name)}（${escapeHtml(user.department)}）</div>
+        <button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="switchView('account')">参加意向・管理</button>
+      </div>
+      <div style="margin-top:6px;">${intentHtml}</div>
+      <div style="font-size:12px;color:#64748b;margin-top:4px;">入力された研究内容をもとにDeepSeekが検索します。</div>
     `;
   }
 }
@@ -194,10 +220,11 @@ async function handleRegister(e) {
   const researcher_id = document.getElementById('reg-researcher-id').value.trim();
   const department = document.getElementById('reg-dept').value.trim();
   const role = document.getElementById('reg-role').value.trim();
+  const intent_status = document.getElementById('reg-intent-status')?.value || '積極的に参加したい（共同研究・公募連携を歓迎）';
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
 
-  const res = await apiPost('/api/auth/register', { name, researcher_id, department, role, email, password });
+  const res = await apiPost('/api/auth/register', { name, researcher_id, department, role, intent_status, email, password });
   if (!res.ok) {
     showAuthError(res.error || '登録に失敗しました');
     return;
@@ -294,6 +321,8 @@ function switchView(viewName) {
     loadAndRenderLikes();
   } else if (viewName === 'history') {
     loadAndRenderHistory();
+  } else if (viewName === 'account') {
+    loadAccountView();
   }
 }
 
@@ -351,6 +380,7 @@ async function runAISearch(isInitial = false) {
       user_email: state.user?.email || '',
       user_name: state.user?.name || '',
       user_researcher_id: state.user?.researcher_id || '',
+      user_custom_keywords: state.user?.custom_keywords || '',
     });
 
     state.researchers = res.researchers || [];
@@ -449,11 +479,19 @@ function renderResearcherCard(r, badgeLetter = 'A') {
         </div>
       </div>
 
+      ${
+        r.intent_message
+          ? `<div style="margin-top:8px;padding:7px 10px;background:#f8fafc;border-left:3px solid #16a34a;border-radius:6px;font-size:12px;color:#334155;">
+              <strong>💬 本人からの連携メッセージ：</strong>${escapeHtml(r.intent_message)}
+             </div>`
+          : ''
+      }
+
       <div class="card-footer-bar">
-        <div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span>📄 根拠：${escapeHtml(r.evidence_label || '福井大学研究DB')}</span>
-          &nbsp;|&nbsp;
-          <span>👤 参加意向：未確認</span>
+          <span>|</span>
+          ${getIntentBadgeHtml(r.intent_status)}
         </div>
         <div class="card-footer-actions">
           <button class="outline-action-btn" onclick="openResearcherDetail('${escapeHtml(r.id)}')">詳細を見る</button>
@@ -823,6 +861,16 @@ async function openResearcherDetail(rid) {
         <div style="font-size:12.5px;color:#475569;margin-top:3px;">
           在籍確認：${escapeHtml(r.enrollment_status)} &nbsp;|&nbsp; 根拠：${escapeHtml(r.evidence_label)}
         </div>
+        <div style="margin-top:6px;">
+          ${getIntentBadgeHtml(r.intent_status)}
+        </div>
+        ${
+          r.intent_message
+            ? `<div style="margin-top:6px;padding:7px 10px;background:#f8fafc;border-left:3px solid #16a34a;border-radius:6px;font-size:12px;color:#334155;">
+                <strong>💬 本人からの連携メッセージ：</strong>${escapeHtml(r.intent_message)}
+               </div>`
+            : ''
+        }
       </div>
       <div style="display:flex;gap:8px;">
         ${r.profile_url ? `<a class="outline-action-btn" href="${escapeHtml(r.profile_url)}" target="_blank" rel="noopener">公式プロフィール ↗</a>` : ''}
@@ -841,7 +889,7 @@ async function openResearcherDetail(rid) {
         <tbody>
           ${
             (r.projects || []).length
-              ? r.projects.map((p) => `<tr><td>${escapeHtml(p.start_date)}</td><td>${escapeHtml(p.title)}</td><td>${escapeHtml(p.agency)}</td></tr>`).join('')
+              ? r.projects.map((p) => `<tr><td>${escapeHtml(p.start_date || p.period || '')}</td><td>${escapeHtml(p.title)}</td><td>${escapeHtml(p.agency)}</td></tr>`).join('')
               : `<tr><td colspan="3">記載なし</td></tr>`
           }
         </tbody>
@@ -866,4 +914,232 @@ async function openResearcherDetail(rid) {
 
 function closeModal(id) {
   document.getElementById(id).classList.add('hidden');
+}
+
+// ============================================================================
+// アカウント管理・共同研究の参加意向設定
+// ============================================================================
+let accNameTimer = null;
+
+function loadAccountView() {
+  const u = state.user;
+  if (!u) return;
+
+  const intent = u.intent_status || '積極的に参加したい（共同研究・公募連携を歓迎）';
+  document.getElementById('acc-intent-status').value = intent;
+  document.querySelectorAll('.intent-option-card').forEach((card) => {
+    card.classList.toggle('selected', card.dataset.intent === intent);
+  });
+
+  document.getElementById('acc-intent-message').value = u.intent_message || '';
+  document.getElementById('acc-name').value = u.name || '';
+  document.getElementById('acc-researcher-id').value = u.researcher_id || '';
+  document.getElementById('acc-dept').value = u.department || '福井大学';
+  document.getElementById('acc-role').value = u.role || '教授';
+  document.getElementById('acc-custom-keywords').value = u.custom_keywords || '';
+  document.getElementById('acc-email').value = u.email || '';
+  document.getElementById('acc-new-password').value = '';
+
+  renderAccountPreview();
+  renderAccountDbDetailBox();
+}
+
+function selectIntentOption(intentValue) {
+  document.getElementById('acc-intent-status').value = intentValue;
+  document.querySelectorAll('.intent-option-card').forEach((card) => {
+    card.classList.toggle('selected', card.dataset.intent === intentValue);
+  });
+  renderAccountPreview();
+}
+
+function onInputAccountName(val) {
+  document.getElementById('acc-researcher-id').value = '';
+  renderAccountPreview();
+  const box = document.getElementById('acc-name-suggestions');
+  if (accNameTimer) clearTimeout(accNameTimer);
+  const q = val.trim();
+  if (!q) {
+    box.classList.add('hidden');
+    return;
+  }
+  accNameTimer = setTimeout(async () => {
+    const res = await apiGet(`/api/auth/lookup-name?q=${encodeURIComponent(q)}`);
+    const matches = res.matches || [];
+    if (!matches.length) {
+      box.classList.add('hidden');
+      return;
+    }
+    box.classList.remove('hidden');
+    box.innerHTML = matches
+      .map((r) => {
+        const kws = (r.keywords || []).slice(0, 3).join('・') || r.specialty || '';
+        const encoded = encodeURIComponent(JSON.stringify(r));
+        return `
+          <div class="name-suggestion-item" onclick="selectAccountResearcher('${encoded}')">
+            <div>
+              <div class="ns-name">${escapeHtml(r.name)} <span class="type-badge">${escapeHtml(r.dept_short)}</span></div>
+              <div class="ns-meta">${escapeHtml(r.department)} ${kws ? `｜ ${escapeHtml(kws)}` : ''}</div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }, 180);
+}
+
+function selectAccountResearcher(encoded) {
+  const r = JSON.parse(decodeURIComponent(encoded));
+  document.getElementById('acc-name').value = r.name;
+  document.getElementById('acc-researcher-id').value = r.id;
+  document.getElementById('acc-dept').value = r.department || r.dept_short || '福井大学';
+  document.getElementById('acc-name-suggestions').classList.add('hidden');
+  if (state.user) {
+    state.user.researcher_id = r.id;
+    state.user.db_matched = true;
+    state.user.db_keywords = r.keywords || [];
+    state.user.specialty = r.specialty || '';
+  }
+  renderAccountPreview();
+  renderAccountDbDetailBox();
+  showToast(`福井大学DBの「${r.name}」先生のデータと紐付けました`);
+}
+
+function renderAccountPreview() {
+  const box = document.getElementById('account-card-preview');
+  if (!box) return;
+
+  const name = document.getElementById('acc-name')?.value.trim() || state.user?.name || '研究者';
+  const dept = document.getElementById('acc-dept')?.value.trim() || state.user?.department || '福井大学';
+  const role = document.getElementById('acc-role')?.value.trim() || state.user?.role || '';
+  const intent = document.getElementById('acc-intent-status')?.value || '積極的に参加したい（共同研究・公募連携を歓迎）';
+  const msg = document.getElementById('acc-intent-message')?.value.trim() || '';
+  const customKwStr = document.getElementById('acc-custom-keywords')?.value.trim() || '';
+  const customKws = customKwStr
+    ? customKwStr.split(/[,、/／\s　]+/).map((s) => s.trim()).filter(Boolean)
+    : [];
+  const dbKws = state.user?.db_keywords || state.user?.keywords || [];
+  const mergedKws = [...new Set([...customKws, ...dbKws])].slice(0, 5);
+
+  box.innerHTML = `
+    <div class="item-card" style="background:#fcfdff;">
+      <div class="card-top-row">
+        <div class="r-identity-group">
+          <div class="avatar-circle">${escapeHtml(name.slice(0, 1) || 'U')}</div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="r-name-link">${escapeHtml(name)}</span>
+              <span class="type-badge">${escapeHtml(state.user?.dept_short || '福井大学')}</span>
+              ${role ? `<span style="font-size:12px;color:#475569;font-weight:700;">${escapeHtml(role)}</span>` : ''}
+            </div>
+            <div class="dept-line">${escapeHtml(dept)}</div>
+            <div class="keyword-pills">
+              ${mergedKws.map((k) => `<span class="kw-pill">${escapeHtml(k)}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      ${
+        msg
+          ? `<div style="margin-top:10px;padding:8px 10px;background:#f8fafc;border-left:3px solid #16a34a;border-radius:6px;font-size:12px;color:#334155;">
+              <strong>💬 本人からの連携メッセージ：</strong>${escapeHtml(msg)}
+             </div>`
+          : ''
+      }
+
+      <div class="card-footer-bar">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span>📄 根拠：${escapeHtml(state.user?.evidence_label || 'researchmap・本人確認記録')}</span>
+          <span>|</span>
+          ${getIntentBadgeHtml(intent)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAccountDbDetailBox() {
+  const box = document.getElementById('account-db-detail-box');
+  if (!box) return;
+  const u = state.user;
+  if (!u || !u.db_matched) {
+    box.innerHTML = `
+      <div style="padding:12px;background:#f8fafc;border-radius:8px;font-size:13px;color:#475569;">
+        現在、福井大学DBの研究者レコードとは未連携です。上の「氏名」欄に福井大学の研究者名を入力すると自動でDBと連携します。
+      </div>
+    `;
+    return;
+  }
+
+  const allKws = u.all_keywords || u.keywords || [];
+  box.innerHTML = `
+    <div style="padding:12px 14px;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div>
+          <span class="type-badge" style="background:#dcfce7;color:#166534;">✓ 福井大学DB連携済（ID: ${escapeHtml(u.researcher_id)}）</span>
+          <div style="font-size:14.5px;font-weight:800;margin-top:6px;">${escapeHtml(u.name)}</div>
+        </div>
+        ${
+          u.researcher_id
+            ? `<button type="button" class="outline-action-btn" onclick="openResearcherDetail('${escapeHtml(u.researcher_id)}')">論文・研究課題一覧を見る</button>`
+            : ''
+        }
+      </div>
+      ${u.specialty ? `<div style="font-size:12.5px;color:#334155;margin-top:6px;"><strong>専門分野：</strong>${escapeHtml(u.specialty)}</div>` : ''}
+      ${
+        allKws.length
+          ? `<div style="margin-top:8px;">
+              <div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:4px;">AI検索に使用されるあなたの研究キーワード：</div>
+              <div class="keyword-pills">${allKws.map((k) => `<span class="kw-pill">${escapeHtml(k)}</span>`).join('')}</div>
+             </div>`
+          : ''
+      }
+      ${
+        u.summary
+          ? `<div style="font-size:12px;color:#475569;margin-top:10px;line-height:1.5;background:#fff;padding:8px 10px;border-radius:6px;border:1px solid #e2e8f0;">
+              <strong>DB研究概要：</strong>${escapeHtml(u.summary)}
+             </div>`
+          : ''
+      }
+    </div>
+  `;
+}
+
+async function handleSaveAccount(e) {
+  e.preventDefault();
+  if (!state.user) return;
+
+  const btn = document.getElementById('btn-save-account');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+
+  try {
+    const payload = {
+      email: document.getElementById('acc-email').value.trim(),
+      name: document.getElementById('acc-name').value.trim(),
+      researcher_id: document.getElementById('acc-researcher-id').value.trim(),
+      department: document.getElementById('acc-dept').value.trim(),
+      role: document.getElementById('acc-role').value.trim(),
+      intent_status: document.getElementById('acc-intent-status').value,
+      intent_message: document.getElementById('acc-intent-message').value.trim(),
+      custom_keywords: document.getElementById('acc-custom-keywords').value.trim(),
+      new_password: document.getElementById('acc-new-password').value,
+    };
+
+    const res = await apiPost('/api/account/update', payload);
+    if (!res.ok) {
+      showToast(res.error || '保存に失敗しました');
+      return;
+    }
+
+    applyLoggedInUser(res.user);
+    loadAccountView();
+    showToast('アカウント設定と共同研究の参加意向を保存しました！');
+  } catch (err) {
+    console.error(err);
+    showToast('通信エラーが発生しました');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'アカウント設定・参加意向を保存する';
+  }
 }

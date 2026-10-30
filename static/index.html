@@ -62,6 +62,15 @@
           </div>
         </div>
         <div class="form-group mt-10">
+          <label class="form-label" for="reg-intent-status">共同研究の参加意向</label>
+          <select id="reg-intent-status" class="form-input">
+            <option value="積極的に参加したい（共同研究・公募連携を歓迎）" selected>🟢 積極的に参加したい（共同研究・公募連携を歓迎）</option>
+            <option value="テーマが合えば相談可能（まずは情報交換から）">🔵 テーマが合えば相談可能（まずは情報交換から）</option>
+            <option value="学内連携・機器利用相談のみ可能">🟡 学内連携・機器利用相談のみ可能</option>
+            <option value="現在は多忙・新規受付停止中">⚪ 現在は多忙・新規受付停止中</option>
+          </select>
+        </div>
+        <div class="form-group mt-10">
           <label class="form-label" for="reg-email">学内メールアドレス</label>
           <input id="reg-email" type="email" class="form-input" placeholder="example@u-fukui.ac.jp" required />
         </div>
@@ -95,7 +104,8 @@
         <span id="header-likes-count" class="like-count-badge">0</span>
       </button>
       <div class="user-profile-pill">
-        <span id="header-user-label">👤 本田 知己（工学系）</span>
+        <span id="header-user-label" style="cursor:pointer;" onclick="switchView('account')" title="アカウント管理・参加意向の設定を開く">👤 本田 知己（工学系）</span>
+        <button class="logout-mini-btn" onclick="switchView('account')" title="アカウント管理・参加意向の設定">設定</button>
         <button class="logout-mini-btn" onclick="handleLogout()" title="ログアウト・アカウント切替">ログアウト</button>
       </div>
     </div>
@@ -118,6 +128,10 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span>相談結果履歴</span>
           <span id="sidebar-history-count" class="nav-count-pill blue">0</span>
+        </button>
+        <button class="nav-item" data-view="account" onclick="switchView('account')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>アカウント管理</span>
         </button>
       </nav>
     </aside>
@@ -269,6 +283,130 @@
         </div>
 
         <div id="history-container" class="cards-stack"></div>
+      </section>
+
+      <!-- VIEW 4: アカウント管理・共同研究の参加意向設定 -->
+      <section id="view-account" class="view-section">
+        <div class="view-header-row">
+          <div>
+            <h1 class="page-title">👤 アカウント管理・共同研究の参加意向</h1>
+            <p class="page-subtitle">あなたの研究者プロフィール、DB連携設定、および他の研究者へ表示される「共同研究の参加意向」を設定できます。</p>
+          </div>
+        </div>
+
+        <div class="account-grid">
+          <!-- Left: Form Settings -->
+          <div class="panel-card">
+            <form id="form-account-settings" onsubmit="handleSaveAccount(event)">
+              <h2 class="panel-title">1. 共同研究の参加意向を選ぶ</h2>
+              <p class="panel-subcaption">ここで選んだ参加意向は、他の研究者がAI検索した際のあなたの候補カードにも表示されます。</p>
+
+              <input type="hidden" id="acc-intent-status" value="積極的に参加したい（共同研究・公募連携を歓迎）" />
+
+              <div class="intent-option-grid mt-12">
+                <div class="intent-option-card selected" data-intent="積極的に参加したい（共同研究・公募連携を歓迎）" onclick="selectIntentOption(this.dataset.intent)">
+                  <div class="intent-card-head">
+                    <span class="intent-dot green"></span>
+                    <span class="intent-card-title">積極的に参加したい（共同研究・公募連携を歓迎）</span>
+                  </div>
+                  <p class="intent-card-desc">学内共同研究の立ち上げや、科研費・JST等の公募への共同応募を積極的に歓迎します。</p>
+                </div>
+
+                <div class="intent-option-card" data-intent="テーマが合えば相談可能（まずは情報交換から）" onclick="selectIntentOption(this.dataset.intent)">
+                  <div class="intent-card-head">
+                    <span class="intent-dot blue"></span>
+                    <span class="intent-card-title">テーマが合えば相談可能（まずは情報交換から）</span>
+                  </div>
+                  <p class="intent-card-desc">研究テーマや役割分担が合致すれば連携可能です。まずは気軽な情報交換・打合せから歓迎します。</p>
+                </div>
+
+                <div class="intent-option-card" data-intent="学内連携・機器利用相談のみ可能" onclick="selectIntentOption(this.dataset.intent)">
+                  <div class="intent-card-head">
+                    <span class="intent-dot amber"></span>
+                    <span class="intent-card-title">学内連携・機器利用相談のみ可能</span>
+                  </div>
+                  <p class="intent-card-desc">分析・計測の助言や機器利用、部分的な技術協力などの相談を中心に受け付けています。</p>
+                </div>
+
+                <div class="intent-option-card" data-intent="現在は多忙・新規受付停止中" onclick="selectIntentOption(this.dataset.intent)">
+                  <div class="intent-card-head">
+                    <span class="intent-dot gray"></span>
+                    <span class="intent-card-title">現在は多忙・新規受付停止中</span>
+                  </div>
+                  <p class="intent-card-desc">現在進行中のプロジェクト等で多忙のため、新規の共同研究相談は一時停止しています。</p>
+                </div>
+              </div>
+
+              <div class="form-group mt-16">
+                <label class="form-label" for="acc-intent-message">共同研究・連携に向けた一言メッセージ（任意）</label>
+                <textarea id="acc-intent-message" class="form-textarea" rows="2" placeholder="例：センサーデータ解析や材料評価に関する医工連携・産学連携テーマがあればお気軽にご相談ください。" oninput="renderAccountPreview()"></textarea>
+              </div>
+
+              <hr class="section-divider" />
+
+              <h2 class="panel-title">2. 基本プロフィール・福井大学DB連携</h2>
+              <p class="panel-subcaption">氏名を変更すると、福井大学DB（9,588名）の研究者データと自動で再照合します。</p>
+
+              <div class="form-group mt-12">
+                <label class="form-label" for="acc-name">氏名（福井大学DB連携）</label>
+                <input id="acc-name" type="text" class="form-input" oninput="onInputAccountName(this.value)" required autocomplete="off" />
+                <input id="acc-researcher-id" type="hidden" value="" />
+                <div id="acc-name-suggestions" class="name-suggestions-box hidden"></div>
+              </div>
+
+              <div class="form-row-2col mt-12">
+                <div class="form-group">
+                  <label class="form-label" for="acc-dept">所属系・学部・講座</label>
+                  <input id="acc-dept" type="text" class="form-input" oninput="renderAccountPreview()" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="acc-role">役職・区分</label>
+                  <input id="acc-role" type="text" class="form-input" oninput="renderAccountPreview()" />
+                </div>
+              </div>
+
+              <div class="form-group mt-12">
+                <label class="form-label" for="acc-custom-keywords">AI検索で追加・強調したい研究キーワード（カンマ区切り・任意）</label>
+                <input id="acc-custom-keywords" type="text" class="form-input" placeholder="例：医工連携, 機械学習, ウェアラブルセンサー" oninput="renderAccountPreview()" />
+                <p class="helper-caption" style="text-align:left;margin-top:4px;">※ DBの登録キーワードに加えて、ここで入力したキーワードもDeepSeek AI検索に使用されます。</p>
+              </div>
+
+              <div class="form-row-2col mt-12">
+                <div class="form-group">
+                  <label class="form-label" for="acc-email">学内メールアドレス</label>
+                  <input id="acc-email" type="email" class="form-input" readonly style="background:#f8fafc;color:#64748b;" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="acc-new-password">パスワード変更（変更する場合のみ）</label>
+                  <input id="acc-new-password" type="password" class="form-input" placeholder="変更しない場合は空欄" />
+                </div>
+              </div>
+
+              <button type="submit" id="btn-save-account" class="primary-cta-btn mt-16">
+                アカウント設定・参加意向を保存する
+              </button>
+            </form>
+          </div>
+
+          <!-- Right: Live Preview & DB Linked Info -->
+          <div class="right-side-stack">
+            <div class="panel-card">
+              <h2 class="panel-title">👀 他の研究者から見たあなたのカード表示プレビュー</h2>
+              <p class="panel-subcaption">他の研究者がAI検索した際、あなたの参加意向やプロフィールはこのように表示されます。</p>
+              <div id="account-card-preview" class="mt-12"></div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header-flex">
+                <div>
+                  <h2 class="panel-title">📚 福井大学DBから自動連携中の研究情報</h2>
+                  <p class="panel-subcaption">AIが共同研究者・公募・貸出機器を探す際に参照しているあなたの基礎データです。</p>
+                </div>
+              </div>
+              <div id="account-db-detail-box" class="mt-10"></div>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
   </div>

@@ -81,21 +81,39 @@ def find_researcher_by_name(conn, name, researcher_id=''):
 
 def enrich_user_with_db_profile(conn, user_dict):
     u = dict(user_dict)
+    u.setdefault('intent_status', '積極的に参加したい（共同研究・公募連携を歓迎）')
+    u.setdefault('intent_message', '')
+    u.setdefault('custom_keywords', '')
+    if not u['intent_status']:
+        u['intent_status'] = '積極的に参加したい（共同研究・公募連携を歓迎）'
+
     prof = find_researcher_by_name(conn, u.get('name', ''), u.get('researcher_id', ''))
+    extra_kws = [
+        k.strip()
+        for k in re.split(r'[,、/／\s　]+', u.get('custom_keywords') or '')
+        if k.strip()
+    ]
     if prof:
         u['researcher_id'] = prof['id']
         u['db_matched'] = True
-        u['department'] = prof.get('department') or u.get('department') or '福井大学'
-        u['dept_short'] = prof.get('dept_short') or '福井大学'
-        u['keywords'] = prof.get('keywords', [])
-        u['all_keywords'] = prof.get('all_keywords', [])
+        u['department'] = u.get('department') or prof.get('department') or '福井大学'
+        u['dept_short'] = prof.get('dept_short') or classify_dept_short(u['department'])
+        merged_kws = list(extra_kws)
+        for k in prof.get('all_keywords', []):
+            if k not in merged_kws:
+                merged_kws.append(k)
+        u['keywords'] = merged_kws[:6]
+        u['all_keywords'] = merged_kws[:15]
+        u['db_keywords'] = prof.get('all_keywords', [])[:12]
         u['specialty'] = prof.get('specialty', '')
         u['summary'] = (prof.get('matching_summary') or prof.get('summary') or '')[:400]
         u['evidence_label'] = prof.get('evidence_label', '')
     else:
         u['db_matched'] = False
-        u['keywords'] = []
-        u['all_keywords'] = []
+        u['dept_short'] = classify_dept_short(u.get('department', ''))
+        u['keywords'] = extra_kws[:6]
+        u['all_keywords'] = extra_kws[:15]
+        u['db_keywords'] = []
         u['specialty'] = ''
         u['summary'] = ''
     return u
@@ -116,19 +134,38 @@ def init_tables_on_conn(conn):
             role TEXT,
             password_hash TEXT,
             created_at TEXT,
-            researcher_id TEXT DEFAULT ''
+            researcher_id TEXT DEFAULT '',
+            intent_status TEXT DEFAULT '積極的に参加したい（共同研究・公募連携を歓迎）',
+            intent_message TEXT DEFAULT '',
+            custom_keywords TEXT DEFAULT ''
         )
     ''')
-    try:
-        conn.execute("ALTER TABLE users ADD COLUMN researcher_id TEXT DEFAULT ''")
-    except Exception:
-        pass
+    for col_def in (
+        "researcher_id TEXT DEFAULT ''",
+        "intent_status TEXT DEFAULT '積極的に参加したい（共同研究・公募連携を歓迎）'",
+        "intent_message TEXT DEFAULT ''",
+        "custom_keywords TEXT DEFAULT ''",
+    ):
+        try:
+            conn.execute(f'ALTER TABLE users ADD COLUMN {col_def}')
+        except Exception:
+            pass
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS researcher_intents (
+            researcher_id TEXT PRIMARY KEY,
+            researcher_name TEXT,
+            intent_status TEXT,
+            intent_message TEXT,
+            updated_at TEXT
+        )
+    ''')
 
     # Seed default demo user linked to a real researcher in DB if not exists
     existing = conn.execute("SELECT email FROM users WHERE email = 'honda@u-fukui.ac.jp'").fetchone()
     if not existing:
         conn.execute(
-            'INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT OR REPLACE INTO users (email, name, department, role, password_hash, created_at, researcher_id, intent_status, intent_message, custom_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             (
                 'honda@u-fukui.ac.jp',
                 '本田 知己',
@@ -137,6 +174,19 @@ def init_tables_on_conn(conn):
                 hash_pw('fukui2026'),
                 datetime.now().strftime('%Y-%m-%d %H:%M'),
                 'r_fukui_26',
+                '積極的に参加したい（共同研究・公募連携を歓迎）',
+                'トライボロジー・材料評価・状態監視に関する学内共同研究や競争的資金への共同応募を歓迎します。',
+                '',
+            ),
+        )
+        conn.execute(
+            'INSERT OR REPLACE INTO researcher_intents VALUES (?, ?, ?, ?, ?)',
+            (
+                'r_fukui_26',
+                '本田 知己',
+                '積極的に参加したい（共同研究・公募連携を歓迎）',
+                'トライボロジー・材料評価・状態監視に関する学内共同研究や競争的資金への共同応募を歓迎します。',
+                datetime.now().strftime('%Y-%m-%d %H:%M'),
             ),
         )
 
@@ -282,7 +332,15 @@ def classify_dept_short(dept_str, spec_str=''):
     return '福井大学'
 
 
-def format_researcher_row(r):
+def get_intent_map(conn):
+    try:
+        rows = conn.execute('SELECT * FROM researcher_intents').fetchall()
+        return {r['researcher_id']: dict(r) for r in rows}
+    except Exception:
+        return {}
+
+
+def format_researcher_row(r, intent_map=None):
     d = dict(r)
     try:
         kws = json.loads(d.get('keywords_json') or '[]')
@@ -314,11 +372,20 @@ def format_researcher_row(r):
     else:
         ev_label = '福井大学研究DB'
     d['evidence_label'] = ev_label
+
+    if intent_map and d.get('id') in intent_map:
+        info = intent_map[d['id']]
+        d['intent_status'] = info.get('intent_status') or '未確認'
+        d['intent_message'] = info.get('intent_message') or ''
+    else:
+        d['intent_status'] = d.get('intent_status') or '未確認'
+        d['intent_message'] = d.get('intent_message') or ''
     return d
 
 
 def search_researchers_db(query='', exclude_id='', exclude_name='', limit=12):
     conn = get_db()
+    intent_map = get_intent_map(conn)
     terms = extract_terms(query)
     rows = conn.execute(
         "SELECT * FROM researchers WHERE matching_target = '対象' OR priority_score >= 40 ORDER BY priority_score DESC, id ASC LIMIT 600"
@@ -333,7 +400,7 @@ def search_researchers_db(query='', exclude_id='', exclude_name='', limit=12):
         if norm_excl_name and normalize_name(r['name']) == norm_excl_name:
             continue
 
-        item = format_researcher_row(r)
+        item = format_researcher_row(r, intent_map=intent_map)
         kw_text = ' '.join(item.get('all_keywords', [])).lower()
         haystack = ' '.join([
             item.get('name', ''),
@@ -657,7 +724,7 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
             if not r:
                 conn.close()
                 return self.send_json({'error': 'Not found'}, 404)
-            item = format_researcher_row(r)
+            item = format_researcher_row(r, intent_map=get_intent_map(conn))
             item['papers'] = [dict(p) for p in conn.execute('SELECT * FROM papers WHERE researcher_id = ? LIMIT 20', (rid,)).fetchall()]
             item['projects'] = [dict(p) for p in conn.execute('SELECT * FROM projects WHERE researcher_id = ? LIMIT 20', (rid,)).fetchall()]
             conn.close()
@@ -691,6 +758,9 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
             role = (body.get('role') or '研究者').strip()
             password = body.get('password') or ''
             researcher_id = (body.get('researcher_id') or '').strip()
+            intent_status = (body.get('intent_status') or '積極的に参加したい（共同研究・公募連携を歓迎）').strip()
+            intent_message = (body.get('intent_message') or '').strip()
+            custom_keywords = (body.get('custom_keywords') or '').strip()
             if not email or not name or not password:
                 return self.send_json({'ok': False, 'error': '氏名・メールアドレス・パスワードを入力してください'}, 400)
 
@@ -702,9 +772,55 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
 
             now = datetime.now().strftime('%Y-%m-%d %H:%M')
             conn.execute(
-                'INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?, ?)',
-                (email, name, department, role, hash_pw(password), now, researcher_id),
+                'INSERT OR REPLACE INTO users (email, name, department, role, password_hash, created_at, researcher_id, intent_status, intent_message, custom_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (email, name, department, role, hash_pw(password), now, researcher_id, intent_status, intent_message, custom_keywords),
             )
+            if researcher_id:
+                conn.execute(
+                    'INSERT OR REPLACE INTO researcher_intents VALUES (?, ?, ?, ?, ?)',
+                    (researcher_id, name, intent_status, intent_message, now),
+                )
+            conn.commit()
+            user_row = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+            enriched = enrich_user_with_db_profile(conn, dict(user_row))
+            conn.close()
+            return self.send_json({'ok': True, 'user': enriched})
+
+        if path == '/api/account/update':
+            email = (body.get('email') or '').strip().lower()
+            name = (body.get('name') or '').strip()
+            department = (body.get('department') or '福井大学').strip()
+            role = (body.get('role') or '教授').strip()
+            researcher_id = (body.get('researcher_id') or '').strip()
+            intent_status = (body.get('intent_status') or '積極的に参加したい（共同研究・公募連携を歓迎）').strip()
+            intent_message = (body.get('intent_message') or '').strip()
+            custom_keywords = (body.get('custom_keywords') or '').strip()
+            new_password = (body.get('new_password') or '').strip()
+
+            if not email or not name:
+                return self.send_json({'ok': False, 'error': '氏名とメールアドレスは必須です'}, 400)
+
+            conn = get_db()
+            matched_prof = find_researcher_by_name(conn, name, researcher_id)
+            if matched_prof:
+                researcher_id = matched_prof['id']
+                if not department or department == '福井大学':
+                    department = matched_prof.get('department') or department
+
+            existing = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+            now = datetime.now().strftime('%Y-%m-%d %H:%M')
+            pw_hash = hash_pw(new_password) if new_password else (existing['password_hash'] if existing else hash_pw('fukui2026'))
+            created_at = existing['created_at'] if existing else now
+
+            conn.execute(
+                'INSERT OR REPLACE INTO users (email, name, department, role, password_hash, created_at, researcher_id, intent_status, intent_message, custom_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (email, name, department, role, pw_hash, created_at, researcher_id, intent_status, intent_message, custom_keywords),
+            )
+            if researcher_id:
+                conn.execute(
+                    'INSERT OR REPLACE INTO researcher_intents VALUES (?, ?, ?, ?, ?)',
+                    (researcher_id, name, intent_status, intent_message, now),
+                )
             conn.commit()
             user_row = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
             enriched = enrich_user_with_db_profile(conn, dict(user_row))
@@ -757,15 +873,16 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
             user_email = body.get('user_email', '')
             user_name = body.get('user_name', '')
             user_researcher_id = body.get('user_researcher_id', '')
+            user_custom_keywords = body.get('user_custom_keywords', '')
 
             conn = get_db()
             user_prof = find_researcher_by_name(conn, user_name, user_researcher_id)
             conn.close()
 
-            # Combine user's own DB research keywords/specialty with the entered research_content
-            user_kw_str = ''
+            # Combine user's own DB research keywords/specialty + custom keywords with the entered research_content
+            user_kw_str = user_custom_keywords or ''
             if user_prof:
-                user_kw_str = ' '.join(user_prof.get('all_keywords', [])[:10]) + ' ' + (user_prof.get('specialty') or '')
+                user_kw_str += ' ' + ' '.join(user_prof.get('all_keywords', [])[:10]) + ' ' + (user_prof.get('specialty') or '')
 
             combined_search_query = f'{research_content} {user_kw_str}'.strip()
 

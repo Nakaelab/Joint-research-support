@@ -1111,15 +1111,122 @@ body {
   z-index: 300;
 }
 
+/* Account Management & Participation Intent */
+.account-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.intent-option-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.intent-option-card {
+  border: 1.5px solid #dbe4f0;
+  border-radius: 10px;
+  padding: 12px 13px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.intent-option-card:hover {
+  border-color: #93b4f5;
+  background: #f8fbff;
+}
+
+.intent-option-card.selected {
+  border-color: var(--primary-blue);
+  background: #eff5ff;
+  box-shadow: 0 0 0 2px rgba(28, 86, 201, 0.12);
+}
+
+.intent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.intent-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.intent-dot.green { background: #16a34a; }
+.intent-dot.blue { background: #2563eb; }
+.intent-dot.amber { background: #d97706; }
+.intent-dot.gray { background: #64748b; }
+
+.intent-card-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.intent-card-desc {
+  font-size: 11.5px;
+  color: #475569;
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.section-divider {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 18px 0;
+}
+
+.intent-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.intent-status-pill.green {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.intent-status-pill.blue {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.intent-status-pill.amber {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.intent-status-pill.gray {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
 @media (max-width: 1280px) {
-  .results-dual-grid {
+  .results-dual-grid,
+  .account-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 960px) {
   .workspace-grid,
-  .history-summary-grid {
+  .history-summary-grid,
+  .intent-option-grid {
     grid-template-columns: 1fr;
   }
   .sticky-panel {
