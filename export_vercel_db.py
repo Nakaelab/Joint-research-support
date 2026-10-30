@@ -71,7 +71,19 @@ def export_compact_db():
             role TEXT,
             password_hash TEXT,
             created_at TEXT,
-            researcher_id TEXT DEFAULT ''
+            researcher_id TEXT DEFAULT '',
+            intent_status TEXT DEFAULT '積極的に参加したい（共同研究・公募連携を歓迎）',
+            intent_message TEXT DEFAULT '',
+            custom_keywords TEXT DEFAULT ''
+        )
+    ''')
+    dst.execute('''
+        CREATE TABLE researcher_intents (
+            researcher_id TEXT PRIMARY KEY,
+            researcher_name TEXT,
+            intent_status TEXT,
+            intent_message TEXT,
+            updated_at TEXT
         )
     ''')
     dst.execute('''
