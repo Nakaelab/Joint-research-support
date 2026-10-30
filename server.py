@@ -283,7 +283,7 @@ def call_deepseek(system_prompt, user_prompt, temperature=0.3):
         with urllib.request.urlopen(req, timeout=50, context=ctx) as resp:
             body = json.loads(resp.read().decode('utf-8'))
             content = body['choices'][0]['message']['content']
-            return json.loads(content), 'DeepSeek AI'
+            return json.loads(content), 'AI推論'
     except Exception:
         return None, 'AI推論'
 

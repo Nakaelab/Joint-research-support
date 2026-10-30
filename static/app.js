@@ -185,7 +185,7 @@ function renderMyDbProfileBox(user) {
           : ''
       }
       <div style="font-size:11.5px;color:#1c56c9;font-weight:700;margin-top:6px;">
-        💡 あなたのDB研究実績・専門分野をもとに、相乗効果のある共同研究者・公募・貸出機器をDeepSeekが検索します。
+        💡 あなたのDB研究実績・専門分野をもとに、相乗効果のある共同研究者・公募・貸出機器をAIが提案します。
       </div>
     `;
   } else {
@@ -195,7 +195,7 @@ function renderMyDbProfileBox(user) {
         <button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="switchView('account')">参加意向・管理</button>
       </div>
       <div style="margin-top:6px;">${intentHtml}</div>
-      <div style="font-size:12px;color:#64748b;margin-top:4px;">入力された研究内容をもとにDeepSeekが検索します。</div>
+      <div style="font-size:12px;color:#64748b;margin-top:4px;">入力された研究内容をもとにAIが提案します。</div>
     `;
   }
 }
@@ -368,7 +368,7 @@ async function runAISearch(isInitial = false) {
 
   const btn = document.getElementById('btn-run-search');
   btn.disabled = true;
-  btn.textContent = 'DeepSeek AIで提案を作成中...';
+  btn.textContent = 'AIで提案を作成中...';
 
   try {
     const res = await apiPost('/api/ai/search', {
