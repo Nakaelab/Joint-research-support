@@ -161,34 +161,11 @@ def init_tables_on_conn(conn):
         )
     ''')
 
-    # Seed default demo user linked to a real researcher in DB if not exists
-    existing = conn.execute("SELECT email FROM users WHERE email = 'honda@u-fukui.ac.jp'").fetchone()
-    if not existing:
-        conn.execute(
-            'INSERT OR REPLACE INTO users (email, name, department, role, password_hash, created_at, researcher_id, intent_status, intent_message, custom_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            (
-                'honda@u-fukui.ac.jp',
-                '本田 知己',
-                '福井大学 工学系部門 工学領域 機械工学講座 教授',
-                '教授',
-                hash_pw('fukui2026'),
-                datetime.now().strftime('%Y-%m-%d %H:%M'),
-                'r_fukui_26',
-                '積極的に参加したい（共同研究・公募連携を歓迎）',
-                'トライボロジー・材料評価・状態監視に関する学内共同研究や競争的資金への共同応募を歓迎します。',
-                '',
-            ),
-        )
-        conn.execute(
-            'INSERT OR REPLACE INTO researcher_intents VALUES (?, ?, ?, ?, ?)',
-            (
-                'r_fukui_26',
-                '本田 知己',
-                '積極的に参加したい（共同研究・公募連携を歓迎）',
-                'トライボロジー・材料評価・状態監視に関する学内共同研究や競争的資金への共同応募を歓迎します。',
-                datetime.now().strftime('%Y-%m-%d %H:%M'),
-            ),
-        )
+    # Remove legacy demo user if still present
+    conn.execute(
+        "DELETE FROM users WHERE email = 'honda@u-fukui.ac.jp' AND password_hash = ?",
+        (hash_pw('fukui2026'),),
+    )
 
     conn.execute('''
         CREATE TABLE IF NOT EXISTS likes (
@@ -740,13 +717,37 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
         if path == '/api/auth/login':
             email = (body.get('email') or '').strip().lower()
             password = body.get('password') or ''
+            cached_acc = body.get('cached_account')
             if not email or not password:
                 return self.send_json({'ok': False, 'error': 'メールアドレスとパスワードを入力してください'}, 400)
             conn = get_db()
             user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
-            if not user or user['password_hash'] != hash_pw(password):
+            # If running on stateless serverless and the user previously registered on this browser, restore their registered record
+            if not user and isinstance(cached_acc, dict) and (cached_acc.get('email') or '').lower() == email and cached_acc.get('password_hash'):
+                conn.execute(
+                    'INSERT OR REPLACE INTO users (email, name, department, role, password_hash, created_at, researcher_id, intent_status, intent_message, custom_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (
+                        email,
+                        cached_acc.get('name', ''),
+                        cached_acc.get('department', '福井大学'),
+                        cached_acc.get('role', '研究者'),
+                        cached_acc.get('password_hash', ''),
+                        cached_acc.get('created_at', ''),
+                        cached_acc.get('researcher_id', ''),
+                        cached_acc.get('intent_status', '積極的に参加したい（共同研究・公募連携を歓迎）'),
+                        cached_acc.get('intent_message', ''),
+                        cached_acc.get('custom_keywords', ''),
+                    ),
+                )
+                conn.commit()
+                user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+
+            if not user:
                 conn.close()
-                return self.send_json({'ok': False, 'error': 'メールアドレスまたはパスワードが正しくありません'}, 401)
+                return self.send_json({'ok': False, 'error': 'このアカウントは未登録です。「新規アカウント登録」から作成してください'}, 401)
+            if user['password_hash'] != hash_pw(password):
+                conn.close()
+                return self.send_json({'ok': False, 'error': 'パスワードが正しくありません'}, 401)
             enriched = enrich_user_with_db_profile(conn, dict(user))
             conn.close()
             return self.send_json({'ok': True, 'user': enriched})

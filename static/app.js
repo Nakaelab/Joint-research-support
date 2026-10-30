@@ -40,12 +40,31 @@ async function apiPost(url, data) {
   return res.json();
 }
 
+function getRegisteredAccounts() {
+  try {
+    return JSON.parse(localStorage.getItem('fukui_registered_accounts') || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveRegisteredAccount(user) {
+  if (!user || !user.email) return;
+  try {
+    const map = getRegisteredAccounts();
+    map[user.email.toLowerCase()] = user;
+    localStorage.setItem('fukui_registered_accounts', JSON.stringify(map));
+  } catch (e) {}
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
   const savedUser = localStorage.getItem('fukui_matching_user');
   if (savedUser) {
     try {
       const parsed = JSON.parse(savedUser);
-      if (parsed && parsed.name && parsed.db_matched !== undefined) {
+      const regMap = getRegisteredAccounts();
+      const isLegacyDemo = parsed.email === 'honda@u-fukui.ac.jp' && !regMap['honda@u-fukui.ac.jp'];
+      if (parsed && parsed.name && parsed.db_matched !== undefined && !isLegacyDemo) {
         applyLoggedInUser(parsed);
       } else {
         localStorage.removeItem('fukui_matching_user');
@@ -202,13 +221,15 @@ function renderMyDbProfileBox(user) {
 
 async function handleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('login-email').value.trim();
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
   const password = document.getElementById('login-password').value;
-  const res = await apiPost('/api/auth/login', { email, password });
+  const cached_account = getRegisteredAccounts()[email] || null;
+  const res = await apiPost('/api/auth/login', { email, password, cached_account });
   if (!res.ok) {
     showAuthError(res.error || 'ログインに失敗しました');
     return;
   }
+  saveRegisteredAccount(res.user);
   applyLoggedInUser(res.user);
   showToast(`${res.user.name} 先生の研究データと連携しました！`);
   await runAISearch(false);
@@ -221,7 +242,7 @@ async function handleRegister(e) {
   const department = document.getElementById('reg-dept').value.trim();
   const role = document.getElementById('reg-role').value.trim();
   const intent_status = document.getElementById('reg-intent-status')?.value || '積極的に参加したい（共同研究・公募連携を歓迎）';
-  const email = document.getElementById('reg-email').value.trim();
+  const email = document.getElementById('reg-email').value.trim().toLowerCase();
   const password = document.getElementById('reg-password').value;
 
   const res = await apiPost('/api/auth/register', { name, researcher_id, department, role, intent_status, email, password });
@@ -229,6 +250,7 @@ async function handleRegister(e) {
     showAuthError(res.error || '登録に失敗しました');
     return;
   }
+  saveRegisteredAccount(res.user);
   applyLoggedInUser(res.user);
   if (res.user.db_matched && res.user.keywords?.length) {
     document.getElementById('research-input').value = `${res.user.keywords.slice(0, 3).join('・')}を活かした分野横断型共同研究`;
@@ -1132,6 +1154,7 @@ async function handleSaveAccount(e) {
       return;
     }
 
+    saveRegisteredAccount(res.user);
     applyLoggedInUser(res.user);
     loadAccountView();
     showToast('アカウント設定と共同研究の参加意向を保存しました！');
