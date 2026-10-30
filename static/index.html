@@ -181,7 +181,7 @@
 
             <div class="form-group mt-16">
               <label class="form-label" for="research-input">2. 研究内容を入力（自分の専門と掛け合わせたいテーマ等）</label>
-              <textarea id="research-input" class="form-textarea" rows="4" placeholder="例：センサーデータによる行動変化の解析、ナノ材料の表面構造評価など">センサーデータと機械学習を用いた状態監視・予防システムの開発</textarea>
+              <textarea id="research-input" class="form-textarea" rows="4" placeholder="例：センサーデータによる行動変化の解析、ナノ材料の表面構造評価、医療画像AIの共同開発など"></textarea>
             </div>
 
             <div class="sample-chips mt-10">
@@ -198,8 +198,10 @@
             <p class="helper-caption">提案結果は自動で「相談結果履歴」に保存されます。気になる候補は「♡ いいね」で保存できます。</p>
           </div>
 
-          <!-- Right Area: Side-by-Side Results -->
-          <div id="results-dual-grid" class="results-dual-grid">
+          <!-- Right Area: Welcome Box (for initial login before search) + Side-by-Side Results -->
+          <div>
+            <div id="welcome-guide-box" class="panel-card hidden"></div>
+            <div id="results-dual-grid" class="results-dual-grid">
             <!-- Column 1: 共同研究者 5名 -->
             <div id="section-researchers" class="panel-card">
               <div class="panel-header-flex">
@@ -249,6 +251,7 @@
                 </div>
                 <div id="list-equipment" class="cards-stack"></div>
               </div>
+            </div>
             </div>
           </div>
         </div>

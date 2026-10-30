@@ -377,6 +377,12 @@ def search_researchers_db(query='', exclude_id='', exclude_name='', limit=12):
         if norm_excl_name and normalize_name(r['name']) == norm_excl_name:
             continue
 
+        dept_str = r['department'] or ''
+        enr_str = r['enrollment_status'] or ''
+        # Exclude researchers whose current department is explicitly another university outside Fukui University
+        if '大学' in dept_str and '福井' not in dept_str and '公式教員一覧' not in enr_str:
+            continue
+
         item = format_researcher_row(r, intent_map=intent_map)
         kw_text = ' '.join(item.get('all_keywords', [])).lower()
         haystack = ' '.join([

@@ -75,7 +75,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   await refreshStatusAndLikes();
   if (state.user) {
-    await runAISearch(true);
+    await initializeUserSessionView(state.user);
   }
 });
 
@@ -179,43 +179,152 @@ function renderMyDbProfileBox(user) {
     return;
   }
   const intentHtml = getIntentBadgeHtml(user.intent_status || '積極的に参加したい（共同研究・公募連携を歓迎）');
-  if (user.db_matched) {
-    const kws = (user.keywords || []).slice(0, 5);
-    box.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-        <div>
-          <span class="type-badge" style="background:#dcfce7;color:#166534;">✓ DB研究情報と連携中</span>
-          <div style="font-size:15.5px;font-weight:800;margin-top:4px;">${escapeHtml(user.name)} <span style="font-size:12px;font-weight:600;color:#475569;">（${escapeHtml(user.role || '研究者')}）</span></div>
-        </div>
-        <div style="display:flex;gap:6px;">
-          ${
-            user.researcher_id
-              ? `<button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="openResearcherDetail('${escapeHtml(user.researcher_id)}')">自分のDB情報</button>`
-              : ''
-          }
-          <button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="switchView('account')">参加意向・管理</button>
+  const kws = (user.keywords || []).slice(0, 5);
+  const avatarChar = (user.name || 'U').trim().slice(0, 1);
+
+  box.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        <div class="avatar-circle" style="width:36px;height:36px;font-size:15px;">${escapeHtml(avatarChar)}</div>
+        <div style="min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:15px;font-weight:800;color:#0f172a;">${escapeHtml(user.name)}</span>
+            ${user.role ? `<span class="type-badge" style="font-size:11px;padding:1px 7px;">${escapeHtml(user.role)}</span>` : ''}
+          </div>
+          <div style="font-size:12px;color:#475569;margin-top:1px;">${escapeHtml(user.department || '福井大学')}</div>
         </div>
       </div>
-      <div style="font-size:12px;color:#475569;margin-top:2px;">${escapeHtml(user.department)}</div>
-      <div style="margin-top:6px;">${intentHtml}</div>
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        ${
+          user.db_matched && user.researcher_id
+            ? `<button class="outline-action-btn" style="padding:4px 8px;font-size:11px;white-space:nowrap;" onclick="openResearcherDetail('${escapeHtml(user.researcher_id)}')">DB情報</button>`
+            : ''
+        }
+        <button class="outline-action-btn" style="padding:4px 8px;font-size:11px;white-space:nowrap;" onclick="switchView('account')">参加意向・管理</button>
+      </div>
+    </div>
+
+    <div style="margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
       ${
-        kws.length
-          ? `<div class="keyword-pills mt-8">${kws.map((k) => `<span class="kw-pill">${escapeHtml(k)}</span>`).join('')}</div>`
+        user.db_matched
+          ? `<span class="type-badge" style="background:#dcfce7;color:#166534;font-size:11px;">✓ 福井大学DB連携中</span>`
           : ''
       }
-      <div style="font-size:11.5px;color:#1c56c9;font-weight:700;margin-top:6px;">
-        💡 あなたのDB研究実績・専門分野をもとに、相乗効果のある共同研究者・公募・貸出機器をAIが提案します。
+      ${intentHtml}
+    </div>
+
+    ${
+      kws.length
+        ? `<div class="keyword-pills mt-8">${kws.map((k) => `<span class="kw-pill">${escapeHtml(k)}</span>`).join('')}</div>`
+        : `<div style="margin-top:8px;">
+            <button type="button" class="chip-btn" style="font-size:11px;color:#1c56c9;border-color:#bfdbfe;background:#eff6ff;" onclick="switchView('account')">
+              ＋ アカウント管理で自分の研究キーワードを設定する
+            </button>
+           </div>`
+    }
+
+    <div style="font-size:11.5px;color:#1c56c9;font-weight:700;margin-top:8px;">
+      💡 ${
+        user.db_matched || kws.length
+          ? 'あなたの研究キーワードと入力テーマを掛け合わせてAIが最適候補を提案します。'
+          : '下の欄に探したい研究テーマを入力して「AIで提案する」を押してください。'
+      }
+    </div>
+  `;
+}
+
+function renderWelcomeGuide(user) {
+  const welcomeBox = document.getElementById('welcome-guide-box');
+  const dualGrid = document.getElementById('results-dual-grid');
+  if (!welcomeBox || !dualGrid) return;
+
+  welcomeBox.classList.remove('hidden');
+  dualGrid.style.display = 'none';
+  document.getElementById('jump-researchers').style.display = 'none';
+  document.getElementById('jump-grants').style.display = 'none';
+  document.getElementById('jump-equipment').style.display = 'none';
+
+  const name = user?.name || '研究者';
+  const dept = user?.department || '福井大学';
+
+  welcomeBox.innerHTML = `
+    <div style="padding:10px 6px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <span class="type-badge" style="background:#dbeafe;color:#1e40af;">👋 ようこそ！ログイン完了</span>
+          <h2 style="font-size:21px;font-weight:800;color:#0f172a;margin-top:8px;">
+            ${escapeHtml(name)} さん（${escapeHtml(dept)}）の研究連携サポート画面です
+          </h2>
+          <p style="font-size:13.5px;color:#475569;margin-top:4px;">
+            左側の「2. 研究内容を入力」に相談したいテーマを入れて<strong>「AIで提案する」</strong>を押すと、福井大学内の<strong>共同研究者5名・おすすめの公募3件・貸出機器</strong>がここに表示されます。
+          </p>
+        </div>
       </div>
-    `;
+
+      <div class="history-summary-grid" style="margin-top:18px;">
+        <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
+          <div class="history-col-title" style="color:#1e40af;">STEP 1. 研究テーマを入力</div>
+          <div class="history-mini-item" style="margin-top:4px;">
+            左の入力欄に、現在取り組んでいる研究やこれから連携したいテーマを自由に入力します。
+          </div>
+        </div>
+        <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
+          <div class="history-col-title" style="color:#1e40af;">STEP 2. AIが研究者・公募・機器を提案</div>
+          <div class="history-mini-item" style="margin-top:4px;">
+            福井大学DB（研究者9,588名・公募516件・貸出機器125件）から、役割案・推薦理由付きで提案します。
+          </div>
+        </div>
+        <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
+          <div class="history-col-title" style="color:#1e40af;">STEP 3. いいね保存＆参加意向設定</div>
+          <div class="history-mini-item" style="margin-top:4px;">
+            気になる候補は「♡ いいね」で保存でき、「アカウント管理」から自分の参加意向も発信できます。
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+        <div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">
+          🚀 ワンクリックでAI提案を試す（テーマを選ぶとすぐ検索します）
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <button type="button" class="outline-action-btn" onclick="setSampleQuery('センサーデータと機械学習を用いた状態監視・行動解析システムの開発')">
+            💡 センサーデータ×機械学習・状態監視
+          </button>
+          <button type="button" class="outline-action-btn" onclick="setSampleQuery('ナノ薄膜・機能性材料の表面微細構造解析とトライボロジー評価')">
+            🔬 ナノ材料・表面微細構造解析
+          </button>
+          <button type="button" class="outline-action-btn" onclick="setSampleQuery('生体イメージングとAI画像診断を組み合わせた医工連携研究')">
+            🏥 生体イメージング×医工連携
+          </button>
+          <button type="button" class="outline-action-btn" onclick="setSampleQuery('地域防災・積雪予測モデルとIoT通信システムの開発')">
+            ❄️ 地域防災・IoTシステム開発
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+        <div style="font-size:12.5px;color:#166534;">
+          <strong>👤 自分の研究キーワードや共同研究の参加意向を設定しませんか？</strong><br>
+          アカウント管理画面でキーワードを登録すると、あなた自身の専門分野も掛け合わせてAIが検索するようになります。
+        </div>
+        <button type="button" class="primary-action-btn" style="background:#16a34a;white-space:nowrap;" onclick="switchView('account')">
+          アカウント管理・参加意向を開く →
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function initializeUserSessionView(user) {
+  const inputEl = document.getElementById('research-input');
+  if (user && (user.db_matched || (user.keywords && user.keywords.length))) {
+    if (!inputEl.value.trim()) {
+      inputEl.value = `${user.keywords.slice(0, 3).join('・')}を活かした分野横断型共同研究`;
+    }
+    await runAISearch(true);
   } else {
-    box.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div style="font-size:14px;font-weight:800;">👤 ${escapeHtml(user.name)}（${escapeHtml(user.department)}）</div>
-        <button class="outline-action-btn" style="padding:4px 9px;font-size:11.5px;" onclick="switchView('account')">参加意向・管理</button>
-      </div>
-      <div style="margin-top:6px;">${intentHtml}</div>
-      <div style="font-size:12px;color:#64748b;margin-top:4px;">入力された研究内容をもとにAIが提案します。</div>
-    `;
+    inputEl.value = '';
+    renderWelcomeGuide(user);
   }
 }
 
@@ -231,8 +340,8 @@ async function handleLogin(e) {
   }
   saveRegisteredAccount(res.user);
   applyLoggedInUser(res.user);
-  showToast(`${res.user.name} 先生の研究データと連携しました！`);
-  await runAISearch(false);
+  showToast(`ようこそ、${res.user.name} さん！`);
+  await initializeUserSessionView(res.user);
 }
 
 async function handleRegister(e) {
@@ -252,11 +361,8 @@ async function handleRegister(e) {
   }
   saveRegisteredAccount(res.user);
   applyLoggedInUser(res.user);
-  if (res.user.db_matched && res.user.keywords?.length) {
-    document.getElementById('research-input').value = `${res.user.keywords.slice(0, 3).join('・')}を活かした分野横断型共同研究`;
-  }
-  showToast(`${res.user.name} さんの研究情報をもとにAI提案を開始します！`);
-  await runAISearch(false);
+  showToast(`${res.user.name} さんのアカウントを登録しました！`);
+  await initializeUserSessionView(res.user);
 }
 
 function handleLogout() {
@@ -386,6 +492,16 @@ async function runAISearch(isInitial = false) {
     return;
   }
 
+  const hasUserKws = Boolean(state.user?.db_matched || state.user?.keywords?.length || state.user?.custom_keywords);
+  if (!researchContent && !hasUserKws) {
+    showToast('「2. 研究内容を入力」に研究テーマを入力するか、下の入力例ボタンを押してください');
+    document.getElementById('research-input').focus();
+    return;
+  }
+
+  const welcomeBox = document.getElementById('welcome-guide-box');
+  if (welcomeBox) welcomeBox.classList.add('hidden');
+  document.getElementById('results-dual-grid').style.display = 'grid';
   onToggleCheckCard();
 
   const btn = document.getElementById('btn-run-search');
@@ -438,6 +554,10 @@ async function runAISearch(isInitial = false) {
 }
 
 function renderSearchResults() {
+  const welcomeBox = document.getElementById('welcome-guide-box');
+  if (welcomeBox) welcomeBox.classList.add('hidden');
+  document.getElementById('results-dual-grid').style.display = 'grid';
+
   const rLen = state.researchers.length;
   const gLen = state.grants.length;
   const eLen = state.equipment.length;
