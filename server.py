@@ -79,15 +79,36 @@ def find_researcher_by_name(conn, name, researcher_id=''):
     return None
 
 
+def is_staff_role(role='', intent_status=''):
+    role_s = role or ''
+    intent_s = intent_status or ''
+    if any(k in intent_s for k in ('職員', '研究支援', '代理検索')):
+        return True
+    return bool(re.search(r'(職員|秘書|事務|URA|技術|スタッフ|支援|コーディネータ|主査|係長|課長)', role_s))
+
+
 def enrich_user_with_db_profile(conn, user_dict):
     u = dict(user_dict)
-    u.setdefault('intent_status', '積極的に参加したい（共同研究・公募連携を歓迎）')
+    staff_flag = is_staff_role(u.get('role', ''), u.get('intent_status', ''))
+    default_intent = (
+        '研究支援・代理検索（職員アカウント）'
+        if staff_flag
+        else '積極的に参加したい（共同研究・公募連携を歓迎）'
+    )
+    u.setdefault('intent_status', default_intent)
     u.setdefault('intent_message', '')
     u.setdefault('custom_keywords', '')
-    if not u['intent_status']:
-        u['intent_status'] = '積極的に参加したい（共同研究・公募連携を歓迎）'
+    if not u['intent_status'] or (staff_flag and not u.get('researcher_id') and '積極的に参加したい' in u['intent_status']):
+        u['intent_status'] = default_intent
 
-    prof = find_researcher_by_name(conn, u.get('name', ''), u.get('researcher_id', ''))
+    u['user_type'] = 'staff' if (staff_flag and not u.get('researcher_id')) else 'researcher'
+
+    # Staff accounts without an explicit researcher_id are not auto-matched to researcher records
+    if staff_flag and not u.get('researcher_id'):
+        prof = None
+    else:
+        prof = find_researcher_by_name(conn, u.get('name', ''), u.get('researcher_id', ''))
+
     extra_kws = [
         k.strip()
         for k in re.split(r'[,、/／\s　]+', u.get('custom_keywords') or '')
@@ -759,20 +780,27 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
             return self.send_json({'ok': True, 'user': enriched})
 
         if path == '/api/auth/register':
+            user_type = (body.get('user_type') or '').strip()
             email = (body.get('email') or '').strip().lower()
             name = (body.get('name') or '').strip()
             department = (body.get('department') or '福井大学').strip()
-            role = (body.get('role') or '研究者').strip()
+            role = (body.get('role') or ('事務職員' if user_type == 'staff' else '研究者')).strip()
             password = body.get('password') or ''
             researcher_id = (body.get('researcher_id') or '').strip()
-            intent_status = (body.get('intent_status') or '積極的に参加したい（共同研究・公募連携を歓迎）').strip()
+            staff_mode = user_type == 'staff' or is_staff_role(role, body.get('intent_status', ''))
+            default_intent = (
+                '研究支援・代理検索（職員アカウント）'
+                if staff_mode
+                else '積極的に参加したい（共同研究・公募連携を歓迎）'
+            )
+            intent_status = (body.get('intent_status') or default_intent).strip()
             intent_message = (body.get('intent_message') or '').strip()
             custom_keywords = (body.get('custom_keywords') or '').strip()
             if not email or not name or not password:
                 return self.send_json({'ok': False, 'error': '氏名・メールアドレス・パスワードを入力してください'}, 400)
 
             conn = get_db()
-            matched_prof = find_researcher_by_name(conn, name, researcher_id)
+            matched_prof = None if (staff_mode and not researcher_id) else find_researcher_by_name(conn, name, researcher_id)
             if matched_prof:
                 researcher_id = matched_prof['id']
                 department = matched_prof.get('department') or department
@@ -797,9 +825,15 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
             email = (body.get('email') or '').strip().lower()
             name = (body.get('name') or '').strip()
             department = (body.get('department') or '福井大学').strip()
-            role = (body.get('role') or '教授').strip()
+            role = (body.get('role') or '職員・研究者').strip()
             researcher_id = (body.get('researcher_id') or '').strip()
-            intent_status = (body.get('intent_status') or '積極的に参加したい（共同研究・公募連携を歓迎）').strip()
+            staff_mode = is_staff_role(role, body.get('intent_status', ''))
+            default_intent = (
+                '研究支援・代理検索（職員アカウント）'
+                if staff_mode
+                else '積極的に参加したい（共同研究・公募連携を歓迎）'
+            )
+            intent_status = (body.get('intent_status') or default_intent).strip()
             intent_message = (body.get('intent_message') or '').strip()
             custom_keywords = (body.get('custom_keywords') or '').strip()
             new_password = (body.get('new_password') or '').strip()
@@ -808,7 +842,7 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
                 return self.send_json({'ok': False, 'error': '氏名とメールアドレスは必須です'}, 400)
 
             conn = get_db()
-            matched_prof = find_researcher_by_name(conn, name, researcher_id)
+            matched_prof = None if (staff_mode and not researcher_id) else find_researcher_by_name(conn, name, researcher_id)
             if matched_prof:
                 researcher_id = matched_prof['id']
                 if not department or department == '福井大学':

@@ -19,7 +19,7 @@
         <span class="brand-divider">|</span>
         <span class="brand-title">研究連携サポート</span>
       </div>
-      <p class="login-subtitle">あなたの研究データ（DB）をもとに共同研究者・公募・貸出機器をAI提案</p>
+      <p class="login-subtitle">共同研究者・公募・貸出機器をAIで提案（教員・研究者・職員 共通）</p>
 
       <div class="login-tabs">
         <button id="tab-btn-login" class="login-tab active" onclick="switchAuthTab('login')">ログイン</button>
@@ -32,7 +32,7 @@
       <form id="form-login" onsubmit="handleLogin(event)">
         <div class="form-group">
           <label class="form-label" for="login-email">学内メールアドレス</label>
-          <input id="login-email" type="email" class="form-input" value="" placeholder="example@u-fukui.ac.jp" required />
+          <input id="login-email" type="email" class="form-input" value="" placeholder="example@u-fukui.ac.jp / @g.u-fukui.ac.jp" required />
         </div>
         <div class="form-group mt-12">
           <label class="form-label" for="login-password">パスワード</label>
@@ -45,40 +45,34 @@
       <!-- Register Form -->
       <form id="form-register" class="hidden" onsubmit="handleRegister(event)">
         <div class="form-group">
-          <label class="form-label" for="reg-name">氏名（福井大学DBの研究者情報と自動照合します）</label>
-          <input id="reg-name" type="text" class="form-input" placeholder="例：山次 俊介 / 藤元 美俊 / 五井 孝憲" oninput="onInputRegisterName(this.value)" required autocomplete="off" />
+          <label class="form-label" for="reg-name">氏名</label>
+          <input id="reg-name" type="text" class="form-input" placeholder="例：福井 太郎 / 福井 花子" oninput="onInputRegisterName(this.value)" required autocomplete="off" />
           <input id="reg-researcher-id" type="hidden" value="" />
           <div id="reg-name-suggestions" class="name-suggestions-box hidden"></div>
           <div id="reg-db-match-banner" class="db-match-banner hidden"></div>
+          <p class="helper-caption" style="text-align:left;margin-top:4px;">※ 職員の方はそのままご入力ください（研究者DBに登録がある方は候補から選択すると自動連携します）</p>
         </div>
+
         <div class="form-row-2col mt-10">
           <div class="form-group">
-            <label class="form-label" for="reg-dept">所属系・学部</label>
-            <input id="reg-dept" type="text" class="form-input" value="工学系部門" placeholder="例：工学系部門・教育学部" />
+            <label class="form-label" for="reg-dept">所属部署・学部</label>
+            <input id="reg-dept" type="text" class="form-input" value="" placeholder="例：工学系部門 / 研究推進課" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="reg-role">役職・区分</label>
-            <input id="reg-role" type="text" class="form-input" value="教授" placeholder="例：教授・准教授" />
+            <label class="form-label" for="reg-role">役職・職種</label>
+            <input id="reg-role" type="text" class="form-input" value="" placeholder="例：教授・准教授・助教・職員など" />
           </div>
         </div>
-        <div class="form-group mt-10">
-          <label class="form-label" for="reg-intent-status">共同研究の参加意向</label>
-          <select id="reg-intent-status" class="form-input">
-            <option value="積極的に参加したい（共同研究・公募連携を歓迎）" selected>🟢 積極的に参加したい（共同研究・公募連携を歓迎）</option>
-            <option value="テーマが合えば相談可能（まずは情報交換から）">🔵 テーマが合えば相談可能（まずは情報交換から）</option>
-            <option value="学内連携・機器利用相談のみ可能">🟡 学内連携・機器利用相談のみ可能</option>
-            <option value="現在は多忙・新規受付停止中">⚪ 現在は多忙・新規受付停止中</option>
-          </select>
-        </div>
+
         <div class="form-group mt-10">
           <label class="form-label" for="reg-email">学内メールアドレス</label>
-          <input id="reg-email" type="email" class="form-input" placeholder="example@u-fukui.ac.jp" required />
+          <input id="reg-email" type="email" class="form-input" placeholder="example@u-fukui.ac.jp / @g.u-fukui.ac.jp" required />
         </div>
         <div class="form-group mt-10">
           <label class="form-label" for="reg-password">パスワード</label>
           <input id="reg-password" type="password" class="form-input" placeholder="任意のパスワード" required />
         </div>
-        <button type="submit" class="primary-cta-btn mt-16">アカウントを登録してAI検索を開始</button>
+        <button type="submit" id="btn-register-submit" class="primary-cta-btn mt-16">アカウントを登録して始める</button>
       </form>
     </div>
   </div>
@@ -308,8 +302,8 @@
       <section id="view-account" class="view-section">
         <div class="view-header-row">
           <div>
-            <h1 class="page-title">👤 アカウント管理・共同研究の参加意向</h1>
-            <p class="page-subtitle">あなたの研究者プロフィール、DB連携設定、および他の研究者へ表示される「共同研究の参加意向」を設定できます。</p>
+            <h1 class="page-title">👤 アカウント管理・利用設定</h1>
+            <p class="page-subtitle">教員・研究者の方も、職員の方も、プロフィールや利用スタイル・参加意向を設定できます。</p>
           </div>
         </div>
 
@@ -317,12 +311,20 @@
           <!-- Left: Form Settings -->
           <div class="panel-card">
             <form id="form-account-settings" onsubmit="handleSaveAccount(event)">
-              <h2 class="panel-title">1. 共同研究の参加意向を選ぶ</h2>
-              <p class="panel-subcaption">ここで選んだ参加意向は、他の研究者がAI検索した際のあなたの候補カードにも表示されます。</p>
+              <h2 class="panel-title">1. 利用スタイル・共同研究の参加意向</h2>
+              <p class="panel-subcaption">職員の方は「研究支援・代理検索」を、教員・研究者の方はご希望の参加意向を選択してください。</p>
 
               <input type="hidden" id="acc-intent-status" value="積極的に参加したい（共同研究・公募連携を歓迎）" />
 
               <div class="intent-option-grid mt-12">
+                <div class="intent-option-card" data-intent="研究支援・代理検索（職員アカウント）" onclick="selectIntentOption(this.dataset.intent)">
+                  <div class="intent-card-head">
+                    <span class="intent-dot indigo"></span>
+                    <span class="intent-card-title">🏢 研究支援・代理検索として利用（職員・URA等）</span>
+                  </div>
+                  <p class="intent-card-desc">事務職員・URA・技術職員など、研究連携や公募・貸出機器の調査・支援を行うモードです。</p>
+                </div>
+
                 <div class="intent-option-card selected" data-intent="積極的に参加したい（共同研究・公募連携を歓迎）" onclick="selectIntentOption(this.dataset.intent)">
                   <div class="intent-card-head">
                     <span class="intent-dot green"></span>
@@ -357,17 +359,17 @@
               </div>
 
               <div class="form-group mt-16">
-                <label class="form-label" for="acc-intent-message">共同研究・連携に向けた一言メッセージ（任意）</label>
-                <textarea id="acc-intent-message" class="form-textarea" rows="2" placeholder="例：センサーデータ解析や材料評価に関する医工連携・産学連携テーマがあればお気軽にご相談ください。" oninput="renderAccountPreview()"></textarea>
+                <label class="form-label" for="acc-intent-message">メモ・共同研究に向けた一言メッセージ（任意）</label>
+                <textarea id="acc-intent-message" class="form-textarea" rows="2" placeholder="例：センサーデータ解析に関する医工連携・産学連携テーマがあればご相談ください。" oninput="renderAccountPreview()"></textarea>
               </div>
 
               <hr class="section-divider" />
 
-              <h2 class="panel-title">2. 基本プロフィール・福井大学DB連携</h2>
-              <p class="panel-subcaption">氏名を変更すると、福井大学DB（9,588名）の研究者データと自動で再照合します。</p>
+              <h2 class="panel-title">2. 基本プロフィール（教員・職員共通）</h2>
+              <p class="panel-subcaption">職員の方はそのまま氏名をご入力ください（教員・研究者の方は福井大学DBの研究者データと自動照合も可能です）。</p>
 
               <div class="form-group mt-12">
-                <label class="form-label" for="acc-name">氏名（福井大学DB連携）</label>
+                <label class="form-label" for="acc-name">氏名</label>
                 <input id="acc-name" type="text" class="form-input" oninput="onInputAccountName(this.value)" required autocomplete="off" />
                 <input id="acc-researcher-id" type="hidden" value="" />
                 <div id="acc-name-suggestions" class="name-suggestions-box hidden"></div>
@@ -375,19 +377,28 @@
 
               <div class="form-row-2col mt-12">
                 <div class="form-group">
-                  <label class="form-label" for="acc-dept">所属系・学部・講座</label>
-                  <input id="acc-dept" type="text" class="form-input" oninput="renderAccountPreview()" />
+                  <label class="form-label" for="acc-dept">所属部署・学部</label>
+                  <input id="acc-dept" type="text" class="form-input" placeholder="例：工学系部門 / 研究推進課" oninput="renderAccountPreview()" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label" for="acc-role">役職・区分</label>
-                  <input id="acc-role" type="text" class="form-input" oninput="renderAccountPreview()" />
+                  <label class="form-label" for="acc-role">役職・職種</label>
+                  <input id="acc-role" type="text" class="form-input" placeholder="例：教授・准教授・助教・職員など" oninput="renderAccountPreview()" />
+                  <div class="mini-preset-chips">
+                    <button type="button" class="mini-chip" onclick="setAccountRolePreset('教授')">教授</button>
+                    <button type="button" class="mini-chip" onclick="setAccountRolePreset('准教授')">准教授</button>
+                    <button type="button" class="mini-chip" onclick="setAccountRolePreset('講師')">講師</button>
+                    <button type="button" class="mini-chip" onclick="setAccountRolePreset('助教')">助教</button>
+                    <button type="button" class="mini-chip" onclick="setAccountRolePreset('職員')">職員</button>
+                    <button type="button" class="mini-chip" onclick="setAccountRolePreset('研究支援・URA')">研究支援・URA</button>
+                    <button type="button" class="mini-chip" onclick="setAccountRolePreset('技術職員')">技術職員</button>
+                  </div>
                 </div>
               </div>
 
               <div class="form-group mt-12">
-                <label class="form-label" for="acc-custom-keywords">AI検索で追加・強調したい研究キーワード（カンマ区切り・任意）</label>
+                <label class="form-label" for="acc-custom-keywords">AI検索で常時掛け合わせたい研究キーワード（担当研究室の分野など・カンマ区切り・任意）</label>
                 <input id="acc-custom-keywords" type="text" class="form-input" placeholder="例：医工連携, 機械学習, ウェアラブルセンサー" oninput="renderAccountPreview()" />
-                <p class="helper-caption" style="text-align:left;margin-top:4px;">※ DBの登録キーワードに加えて、ここで入力したキーワードもAI検索に使用されます。</p>
+                <p class="helper-caption" style="text-align:left;margin-top:4px;">※ 担当している研究室の専門キーワードや、よく調べる分野を登録しておくとAI検索時に自動で考慮されます。</p>
               </div>
 
               <div class="form-row-2col mt-12">

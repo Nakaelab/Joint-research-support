@@ -58,6 +58,15 @@ function saveRegisteredAccount(user) {
   } catch (e) {}
 }
 
+function isStaffUser(user) {
+  if (!user) return false;
+  if (user.user_type === 'staff') return true;
+  const intent = user.intent_status || '';
+  if (intent.includes('職員') || intent.includes('研究支援') || intent.includes('代理検索')) return true;
+  const role = user.role || '';
+  return /(職員|秘書|事務|URA|技術|スタッフ|支援|コーディネータ|主査|係長|課長)/.test(role);
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
   const savedUser = localStorage.getItem('fukui_matching_user');
   if (savedUser) {
@@ -81,7 +90,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============================================================================
-// ログイン・アカウント登録（DB氏名自動照合付き）
+// ログイン・アカウント登録（教員・研究者・職員 共通）
 // ============================================================================
 function switchAuthTab(mode) {
   const isLogin = mode === 'login';
@@ -103,15 +112,15 @@ function onInputRegisterName(val) {
   document.getElementById('reg-researcher-id').value = '';
   document.getElementById('reg-db-match-banner').classList.add('hidden');
   clearTimeout(_lookupTimer);
+  const box = document.getElementById('reg-name-suggestions');
   const q = val.trim();
   if (!q) {
-    document.getElementById('reg-name-suggestions').classList.add('hidden');
+    box.classList.add('hidden');
     return;
   }
   _lookupTimer = setTimeout(async () => {
     const res = await apiGet(`/api/auth/lookup-name?name=${encodeURIComponent(q)}`);
     const items = res.items || [];
-    const box = document.getElementById('reg-name-suggestions');
     if (!items.length) {
       box.classList.add('hidden');
       return;
@@ -150,6 +159,9 @@ function selectRegisterResearcher(encoded) {
 
 function getIntentBadgeHtml(intentStr) {
   const s = intentStr || '未確認';
+  if (s.includes('職員') || s.includes('研究支援') || s.includes('代理検索')) {
+    return `<span class="intent-status-pill indigo">🏢 ${escapeHtml(s)}</span>`;
+  }
   if (s.includes('積極的')) {
     return `<span class="intent-status-pill green">🟢 参加意向：${escapeHtml(s)}</span>`;
   }
@@ -166,10 +178,16 @@ function getIntentBadgeHtml(intentStr) {
 }
 
 function applyLoggedInUser(user) {
+  if (user && isStaffUser(user) && !user.db_matched) {
+    if (!user.intent_status || user.intent_status.includes('積極的に参加したい')) {
+      user.intent_status = '研究支援・代理検索（職員アカウント）';
+    }
+  }
   state.user = user;
   localStorage.setItem('fukui_matching_user', JSON.stringify(user));
   document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('header-user-label').textContent = `👤 ${user.name}（${user.dept_short || user.department || '福井大学'}）`;
+  const roleSuffix = user.role ? `・${user.role}` : '';
+  document.getElementById('header-user-label').textContent = `👤 ${user.name}（${user.dept_short || user.department || '福井大学'}${roleSuffix}）`;
   renderMyDbProfileBox(user);
 }
 
@@ -179,7 +197,10 @@ function renderMyDbProfileBox(user) {
     box.innerHTML = '';
     return;
   }
-  const intentHtml = getIntentBadgeHtml(user.intent_status || '積極的に参加したい（共同研究・公募連携を歓迎）');
+  const staffMode = isStaffUser(user) && !user.db_matched;
+  const intentHtml = staffMode
+    ? `<span class="intent-status-pill indigo">🏢 職員・研究支援アカウント（${escapeHtml(user.role || '職員')}）</span>`
+    : getIntentBadgeHtml(user.intent_status || '積極的に参加したい（共同研究・公募連携を歓迎）');
   const kws = (user.keywords || []).slice(0, 5);
   const avatarChar = (user.name || 'U').trim().slice(0, 1);
 
@@ -201,7 +222,7 @@ function renderMyDbProfileBox(user) {
             ? `<button class="outline-action-btn" style="padding:4px 8px;font-size:11px;white-space:nowrap;" onclick="openResearcherDetail('${escapeHtml(user.researcher_id)}')">DB情報</button>`
             : ''
         }
-        <button class="outline-action-btn" style="padding:4px 8px;font-size:11px;white-space:nowrap;" onclick="switchView('account')">参加意向・管理</button>
+        <button class="outline-action-btn" style="padding:4px 8px;font-size:11px;white-space:nowrap;" onclick="switchView('account')">アカウント設定</button>
       </div>
     </div>
 
@@ -219,7 +240,7 @@ function renderMyDbProfileBox(user) {
         ? `<div class="keyword-pills mt-8">${kws.map((k) => `<span class="kw-pill">${escapeHtml(k)}</span>`).join('')}</div>`
         : `<div style="margin-top:8px;">
             <button type="button" class="chip-btn" style="font-size:11px;color:#1c56c9;border-color:#bfdbfe;background:#eff6ff;" onclick="switchView('account')">
-              ＋ アカウント管理で自分の研究キーワードを設定する
+              ${staffMode ? '＋ 担当研究室・よく探す分野のキーワードを設定する（任意）' : '＋ アカウント管理で自分の研究キーワードを設定する'}
             </button>
            </div>`
     }
@@ -227,7 +248,9 @@ function renderMyDbProfileBox(user) {
     <div style="font-size:11.5px;color:#1c56c9;font-weight:700;margin-top:8px;">
       💡 ${
         user.db_matched || kws.length
-          ? 'あなたの研究キーワードと入力テーマを掛け合わせてAIが最適候補を提案します。'
+          ? '登録キーワードと入力テーマを掛け合わせてAIが最適候補を提案します。'
+          : staffMode
+          ? '先生から相談された研究テーマや探したい公募・機器の分野を下の欄に入力してください。'
           : '下の欄に探したい研究テーマを入力して「AIで提案する」を押してください。'
       }
     </div>
@@ -247,19 +270,27 @@ function renderWelcomeGuide(user) {
   document.getElementById('jump-grants').style.display = 'none';
   document.getElementById('jump-equipment').style.display = 'none';
 
-  const name = user?.name || '研究者';
+  const name = user?.name || '利用者';
   const dept = user?.department || '福井大学';
+  const role = user?.role ? `・${user.role}` : '';
+  const staffMode = isStaffUser(user) && !user?.db_matched;
 
   welcomeBox.innerHTML = `
     <div style="padding:10px 6px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <div>
-          <span class="type-badge" style="background:#dbeafe;color:#1e40af;">👋 ようこそ！ログイン完了</span>
+          <span class="type-badge" style="background:#dbeafe;color:#1e40af;">
+            ${staffMode ? '🏢 職員・研究支援モードでログイン中' : '👋 ようこそ！ログイン完了'}
+          </span>
           <h2 style="font-size:21px;font-weight:800;color:#0f172a;margin-top:8px;">
-            ${escapeHtml(name)} さん（${escapeHtml(dept)}）の研究連携サポート画面です
+            ${escapeHtml(name)} さん（${escapeHtml(dept)}${escapeHtml(role)}）の研究連携サポート画面です
           </h2>
           <p style="font-size:13.5px;color:#475569;margin-top:4px;">
-            左側の「2. 研究内容を入力」に相談したいテーマを入れて<strong>「AIで提案する」</strong>を押すと、福井大学内の<strong>共同研究者5名・おすすめの公募3件・貸出機器</strong>がここに表示されます。
+            ${
+              staffMode
+                ? '先生方から依頼された研究テーマやキーワードを左側の「2. 研究内容を入力」に入れて<strong>「AIで提案する」</strong>を押すと、学内の<strong>共同研究者5名・おすすめの公募3件・貸出機器</strong>をまとめて調査できます。'
+                : '左側の「2. 研究内容を入力」に相談したいテーマを入れて<strong>「AIで提案する」</strong>を押すと、福井大学内の<strong>共同研究者5名・おすすめの公募3件・貸出機器</strong>がここに表示されます。'
+            }
           </p>
         </div>
       </div>
@@ -268,7 +299,7 @@ function renderWelcomeGuide(user) {
         <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
           <div class="history-col-title" style="color:#1e40af;">STEP 1. 研究テーマを入力</div>
           <div class="history-mini-item" style="margin-top:4px;">
-            左の入力欄に、現在取り組んでいる研究やこれから連携したいテーマを自由に入力します。
+            左の入力欄に、調査したい研究テーマや先生方の専門キーワードを自由に入力します。
           </div>
         </div>
         <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
@@ -278,9 +309,9 @@ function renderWelcomeGuide(user) {
           </div>
         </div>
         <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
-          <div class="history-col-title" style="color:#1e40af;">STEP 3. いいね保存＆参加意向設定</div>
+          <div class="history-col-title" style="color:#1e40af;">STEP 3. いいね保存＆履歴管理</div>
           <div class="history-mini-item" style="margin-top:4px;">
-            気になる候補は「♡ いいね」で保存でき、「アカウント管理」から自分の参加意向も発信できます。
+            気になる候補は「♡ いいね」で保存でき、「相談結果履歴」からいつでも先生への報告・共有用に再表示できます。
           </div>
         </div>
       </div>
@@ -307,11 +338,11 @@ function renderWelcomeGuide(user) {
 
       <div style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
         <div style="font-size:12.5px;color:#166534;">
-          <strong>👤 自分の研究キーワードや共同研究の参加意向を設定しませんか？</strong><br>
-          アカウント管理画面でキーワードを登録すると、あなた自身の専門分野も掛け合わせてAIが検索するようになります。
+          <strong>👤 ${staffMode ? '担当研究室のキーワードや利用設定を登録しませんか？' : '自分の研究キーワードや共同研究の参加意向を設定しませんか？'}</strong><br>
+          アカウント管理画面でキーワードを登録すると、毎回入力しなくてもAI検索時に自動で掛け合わされます。
         </div>
         <button type="button" class="primary-action-btn" style="background:#16a34a;white-space:nowrap;" onclick="switchView('account')">
-          アカウント管理・参加意向を開く →
+          アカウント設定を開く →
         </button>
       </div>
     </div>
@@ -351,13 +382,19 @@ async function handleRegister(e) {
   e.preventDefault();
   const name = document.getElementById('reg-name').value.trim();
   const researcher_id = document.getElementById('reg-researcher-id').value.trim();
-  const department = document.getElementById('reg-dept').value.trim();
+  const department = document.getElementById('reg-dept').value.trim() || '福井大学';
   const role = document.getElementById('reg-role').value.trim();
-  const intent_status = document.getElementById('reg-intent-status')?.value || '積極的に参加したい（共同研究・公募連携を歓迎）';
   const email = document.getElementById('reg-email').value.trim().toLowerCase();
   const password = document.getElementById('reg-password').value;
 
-  const res = await apiPost('/api/auth/register', { name, researcher_id, department, role, intent_status, email, password });
+  const res = await apiPost('/api/auth/register', {
+    name,
+    researcher_id,
+    department,
+    role,
+    email,
+    password,
+  });
   if (!res.ok) {
     showAuthError(res.error || '登録に失敗しました');
     return;
@@ -1148,11 +1185,25 @@ function closeModal(id) {
 // ============================================================================
 let accNameTimer = null;
 
+function setAccountRolePreset(roleVal) {
+  const roleInput = document.getElementById('acc-role');
+  if (roleInput) {
+    roleInput.value = roleVal;
+  }
+  if (/(職員|事務|URA|技術|スタッフ|支援|コーディネータ)/.test(roleVal) && !state.user?.db_matched) {
+    selectIntentOption('研究支援・代理検索（職員アカウント）');
+  }
+  renderAccountPreview();
+}
+
 function loadAccountView() {
   const u = state.user;
   if (!u) return;
 
-  const intent = u.intent_status || '積極的に参加したい（共同研究・公募連携を歓迎）';
+  const staffDefault = isStaffUser(u) && !u.db_matched;
+  const intent =
+    u.intent_status ||
+    (staffDefault ? '研究支援・代理検索（職員アカウント）' : '積極的に参加したい（共同研究・公募連携を歓迎）');
   document.getElementById('acc-intent-status').value = intent;
   document.querySelectorAll('.intent-option-card').forEach((card) => {
     card.classList.toggle('selected', card.dataset.intent === intent);
@@ -1162,7 +1213,7 @@ function loadAccountView() {
   document.getElementById('acc-name').value = u.name || '';
   document.getElementById('acc-researcher-id').value = u.researcher_id || '';
   document.getElementById('acc-dept').value = u.department || '福井大学';
-  document.getElementById('acc-role').value = u.role || '教授';
+  document.getElementById('acc-role').value = u.role || (staffDefault ? '職員' : '研究者');
   document.getElementById('acc-custom-keywords').value = u.custom_keywords || '';
   document.getElementById('acc-email').value = u.email || '';
   document.getElementById('acc-new-password').value = '';
@@ -1236,7 +1287,7 @@ function renderAccountPreview() {
   const box = document.getElementById('account-card-preview');
   if (!box) return;
 
-  const name = document.getElementById('acc-name')?.value.trim() || state.user?.name || '研究者';
+  const name = document.getElementById('acc-name')?.value.trim() || state.user?.name || '利用者';
   const dept = document.getElementById('acc-dept')?.value.trim() || state.user?.department || '福井大学';
   const role = document.getElementById('acc-role')?.value.trim() || state.user?.role || '';
   const intent = document.getElementById('acc-intent-status')?.value || '積極的に参加したい（共同研究・公募連携を歓迎）';
@@ -1247,6 +1298,7 @@ function renderAccountPreview() {
     : [];
   const dbKws = state.user?.db_keywords || state.user?.keywords || [];
   const mergedKws = [...new Set([...customKws, ...dbKws])].slice(0, 5);
+  const isStaffPreview = intent.includes('職員') || /(職員|秘書|事務|URA|技術|スタッフ|支援|コーディネータ)/.test(role);
 
   box.innerHTML = `
     <div class="item-card" style="background:#fcfdff;">
@@ -1270,14 +1322,14 @@ function renderAccountPreview() {
       ${
         msg
           ? `<div style="margin-top:10px;padding:8px 10px;background:#f8fafc;border-left:3px solid #16a34a;border-radius:6px;font-size:12px;color:#334155;">
-              <strong>💬 本人からの連携メッセージ：</strong>${escapeHtml(msg)}
+              <strong>💬 ${isStaffPreview ? 'メモ・連絡事項：' : '本人からの連携メッセージ：'}</strong>${escapeHtml(msg)}
              </div>`
           : ''
       }
 
       <div class="card-footer-bar">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span>📄 根拠：${escapeHtml(state.user?.evidence_label || 'researchmap・本人確認記録')}</span>
+          <span>📄 区分：${escapeHtml(isStaffPreview ? '職員・研究支援アカウント' : state.user?.evidence_label || '教員・研究者アカウント')}</span>
           <span>|</span>
           ${getIntentBadgeHtml(intent)}
         </div>
@@ -1291,9 +1343,14 @@ function renderAccountDbDetailBox() {
   if (!box) return;
   const u = state.user;
   if (!u || !u.db_matched) {
+    const staffMode = isStaffUser(u);
     box.innerHTML = `
-      <div style="padding:12px;background:#f8fafc;border-radius:8px;font-size:13px;color:#475569;">
-        現在、福井大学DBの研究者レコードとは未連携です。上の「氏名」欄に福井大学の研究者名を入力すると自動でDBと連携します。
+      <div style="padding:12px;background:#f8fafc;border-radius:8px;font-size:13px;color:#475569;line-height:1.55;">
+        ${
+          staffMode
+            ? '🏢 <strong>職員・研究支援アカウントとしてご利用中です（研究者DB連携なしで利用可能）。</strong><br>特定の研究室や先生の代理で継続的に調査する場合は、左の「AI検索で常時掛け合わせたい研究キーワード」に分野を入力するか、氏名欄から対象研究者を検索して紐付けることも可能です。'
+            : '現在、福井大学DBの研究者レコードとは未連携です。上の「氏名」欄に福井大学の研究者名を入力すると自動でDBと連携します（職員の方は未連携のままで問題ありません）。'
+        }
       </div>
     `;
     return;
