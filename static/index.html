@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>福井大学 | 研究連携サポート</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
@@ -112,26 +112,30 @@
   </header>
 
   <div class="app-layout">
-    <!-- Left Sidebar -->
+    <!-- Left Sidebar (Bottom Nav on Mobile) -->
     <aside class="sidebar">
       <nav class="sidebar-nav">
         <button class="nav-item active" data-view="search" onclick="switchView('search')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <span>研究連携を探す</span>
+          <span class="nav-label-full">研究連携を探す</span>
+          <span class="nav-label-mobile">探す</span>
         </button>
         <button class="nav-item" data-view="likes" onclick="switchView('likes')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          <span>いいね一覧</span>
+          <span class="nav-label-full">いいね一覧</span>
+          <span class="nav-label-mobile">いいね</span>
           <span id="sidebar-likes-count" class="nav-count-pill">0</span>
         </button>
         <button class="nav-item" data-view="history" onclick="switchView('history')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>相談結果履歴</span>
+          <span class="nav-label-full">相談結果履歴</span>
+          <span class="nav-label-mobile">相談履歴</span>
           <span id="sidebar-history-count" class="nav-count-pill blue">0</span>
         </button>
         <button class="nav-item" data-view="account" onclick="switchView('account')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span>アカウント管理</span>
+          <span class="nav-label-full">アカウント管理</span>
+          <span class="nav-label-mobile">マイ設定</span>
         </button>
       </nav>
     </aside>
@@ -154,7 +158,7 @@
 
         <div class="workspace-grid">
           <!-- Left Column: User DB Profile + Input Form -->
-          <div class="panel-card sticky-panel">
+          <div id="search-form-panel" class="panel-card sticky-panel">
             <!-- Logged-in User's DB Researcher Card -->
             <div id="my-db-profile-box" class="my-db-profile-box mb-14"></div>
 
@@ -199,8 +203,20 @@
           </div>
 
           <!-- Right Area: Welcome Box (for initial login before search) + Side-by-Side Results -->
-          <div>
+          <div id="results-area-anchor">
             <div id="welcome-guide-box" class="panel-card hidden"></div>
+
+            <!-- Mobile Result Category Switcher Bar (Visible on Mobile when results exist) -->
+            <div id="mobile-result-bar" class="mobile-result-bar hidden">
+              <div class="mobile-result-tabs">
+                <button type="button" class="m-res-tab active" data-m-tab="all" onclick="switchMobileResultTab('all')">すべて</button>
+                <button type="button" class="m-res-tab" id="m-tab-researchers" data-m-tab="researchers" onclick="switchMobileResultTab('researchers')">👤 研究者 <span id="m-count-r" class="m-tab-count">5</span></button>
+                <button type="button" class="m-res-tab" id="m-tab-grants" data-m-tab="grants" onclick="switchMobileResultTab('grants')">📄 公募 <span id="m-count-g" class="m-tab-count">3</span></button>
+                <button type="button" class="m-res-tab" id="m-tab-equipment" data-m-tab="equipment" onclick="switchMobileResultTab('equipment')">🔬 機器 <span id="m-count-e" class="m-tab-count">4</span></button>
+              </div>
+              <button type="button" class="m-scroll-search-btn" onclick="scrollToSearchForm()">↑ 条件変更</button>
+            </div>
+
             <div id="results-dual-grid" class="results-dual-grid">
             <!-- Column 1: 共同研究者 5名 -->
             <div id="section-researchers" class="panel-card">

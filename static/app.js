@@ -7,6 +7,7 @@ const state = {
   likedItems: [],
   likesFilter: 'all',
   historyItems: [],
+  mobileResultTab: 'all',
 };
 
 function escapeHtml(str) {
@@ -236,9 +237,11 @@ function renderMyDbProfileBox(user) {
 function renderWelcomeGuide(user) {
   const welcomeBox = document.getElementById('welcome-guide-box');
   const dualGrid = document.getElementById('results-dual-grid');
+  const mobileBar = document.getElementById('mobile-result-bar');
   if (!welcomeBox || !dualGrid) return;
 
   welcomeBox.classList.remove('hidden');
+  if (mobileBar) mobileBar.classList.add('hidden');
   dualGrid.style.display = 'none';
   document.getElementById('jump-researchers').style.display = 'none';
   document.getElementById('jump-grants').style.display = 'none';
@@ -445,6 +448,7 @@ function switchView(viewName) {
   document.querySelectorAll('.view-section').forEach((sec) => {
     sec.classList.toggle('active', sec.id === `view-${viewName}`);
   });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   if (viewName === 'likes') {
     loadAndRenderLikes();
   } else if (viewName === 'history') {
@@ -454,15 +458,76 @@ function switchView(viewName) {
   }
 }
 
+function switchMobileResultTab(tabName) {
+  state.mobileResultTab = tabName || 'all';
+  document.querySelectorAll('#mobile-result-bar .m-res-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mTab === state.mobileResultTab);
+  });
+  applyMobileResultTabVisibility();
+  const anchor = document.getElementById('results-area-anchor');
+  if (anchor && window.innerWidth <= 768) {
+    const rect = anchor.getBoundingClientRect();
+    if (rect.top < 0 || rect.top > 180) {
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+}
+
+function scrollToSearchForm() {
+  const formPanel = document.getElementById('search-form-panel');
+  if (formPanel) {
+    formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function applyMobileResultTabVisibility() {
+  const chkR = document.getElementById('chk-researchers').checked;
+  const chkE = document.getElementById('chk-equipment').checked;
+  const isMobile = window.innerWidth <= 768;
+
+  const mTabR = document.getElementById('m-tab-researchers');
+  const mTabG = document.getElementById('m-tab-grants');
+  const mTabE = document.getElementById('m-tab-equipment');
+  if (mTabR) mTabR.style.display = chkR ? 'inline-flex' : 'none';
+  if (mTabG) mTabG.style.display = chkR ? 'inline-flex' : 'none';
+  if (mTabE) mTabE.style.display = chkE ? 'inline-flex' : 'none';
+
+  if ((!chkR && (state.mobileResultTab === 'researchers' || state.mobileResultTab === 'grants')) ||
+      (!chkE && state.mobileResultTab === 'equipment')) {
+    state.mobileResultTab = 'all';
+    document.querySelectorAll('#mobile-result-bar .m-res-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.mTab === 'all');
+    });
+  }
+
+  const tab = isMobile ? state.mobileResultTab : 'all';
+  const showR = chkR && (tab === 'all' || tab === 'researchers');
+  const showG = chkR && (tab === 'all' || tab === 'grants');
+  const showE = chkE && (tab === 'all' || tab === 'equipment');
+
+  document.getElementById('section-researchers').style.display = showR ? 'block' : 'none';
+  document.getElementById('section-grants').style.display = showG ? 'block' : 'none';
+  document.getElementById('section-equipment').style.display = showE ? 'block' : 'none';
+
+  const rightStack = document.getElementById('right-side-stack');
+  if (rightStack) {
+    rightStack.style.display = (showG || showE) ? 'flex' : 'none';
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('results-dual-grid')?.style.display !== 'none') {
+    applyMobileResultTabVisibility();
+  }
+});
+
 function onToggleCheckCard() {
   const chkR = document.getElementById('chk-researchers').checked;
   const chkE = document.getElementById('chk-equipment').checked;
   document.getElementById('card-chk-researchers').classList.toggle('selected', chkR);
   document.getElementById('card-chk-equipment').classList.toggle('selected', chkE);
-
-  document.getElementById('section-researchers').style.display = chkR ? 'block' : 'none';
-  document.getElementById('section-grants').style.display = chkR ? 'block' : 'none';
-  document.getElementById('section-equipment').style.display = chkE ? 'block' : 'none';
 
   document.getElementById('jump-researchers').style.display = chkR ? 'inline-flex' : 'none';
   document.getElementById('jump-grants').style.display = chkR ? 'inline-flex' : 'none';
@@ -474,6 +539,8 @@ function onToggleCheckCard() {
   } else {
     dualGrid.classList.remove('single-col');
   }
+
+  applyMobileResultTabVisibility();
 }
 
 function setSampleQuery(text) {
@@ -544,7 +611,15 @@ async function runAISearch(isInitial = false) {
     updateHistoryBadges(histCount);
 
     renderSearchResults();
-    if (!isInitial) showToast('あなたの研究データと研究内容をもとにAI提案を更新しました');
+    if (!isInitial) {
+      showToast('あなたの研究データと研究内容をもとにAI提案を更新しました');
+      if (window.innerWidth <= 768) {
+        setTimeout(() => {
+          const anchor = document.getElementById('results-area-anchor');
+          if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+      }
+    }
   } catch (e) {
     console.error(e);
   } finally {
@@ -556,6 +631,8 @@ async function runAISearch(isInitial = false) {
 function renderSearchResults() {
   const welcomeBox = document.getElementById('welcome-guide-box');
   if (welcomeBox) welcomeBox.classList.add('hidden');
+  const mobileBar = document.getElementById('mobile-result-bar');
+  if (mobileBar) mobileBar.classList.remove('hidden');
   document.getElementById('results-dual-grid').style.display = 'grid';
 
   const rLen = state.researchers.length;
@@ -564,6 +641,8 @@ function renderSearchResults() {
 
   document.getElementById('count-researchers').textContent = `${rLen}名`;
   document.getElementById('jump-r-count').textContent = `${rLen}名`;
+  const mCountR = document.getElementById('m-count-r');
+  if (mCountR) mCountR.textContent = rLen;
   const rContainer = document.getElementById('list-researchers');
   const letters = ['A', 'B', 'C', 'D', 'E'];
   rContainer.innerHTML = state.researchers
@@ -572,13 +651,19 @@ function renderSearchResults() {
 
   document.getElementById('count-grants').textContent = `${gLen}件`;
   document.getElementById('jump-g-count').textContent = `${gLen}件`;
+  const mCountG = document.getElementById('m-count-g');
+  if (mCountG) mCountG.textContent = gLen;
   const gContainer = document.getElementById('list-grants');
   gContainer.innerHTML = state.grants.map((g) => renderGrantCard(g)).join('');
 
   document.getElementById('count-equipment').textContent = `${eLen}件`;
   document.getElementById('jump-e-count').textContent = `${eLen}件`;
+  const mCountE = document.getElementById('m-count-e');
+  if (mCountE) mCountE.textContent = eLen;
   const eContainer = document.getElementById('list-equipment');
   eContainer.innerHTML = state.equipment.map((eq) => renderEquipmentCard(eq)).join('');
+
+  applyMobileResultTabVisibility();
 }
 
 function renderResearcherCard(r, badgeLetter = 'A') {
@@ -592,7 +677,7 @@ function renderResearcherCard(r, badgeLetter = 'A') {
       <div class="card-top-row">
         <div class="r-identity-group">
           <div class="avatar-circle">${escapeHtml(badgeLetter)}</div>
-          <div style="flex:1;min-width:160px;">
+          <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span class="r-name-link" onclick="openResearcherDetail('${escapeHtml(r.id)}')">${escapeHtml(r.name)}</span>
               <span class="type-badge">${escapeHtml(r.dept_short || '福井大学')}</span>
@@ -1105,8 +1190,8 @@ function onInputAccountName(val) {
     return;
   }
   accNameTimer = setTimeout(async () => {
-    const res = await apiGet(`/api/auth/lookup-name?q=${encodeURIComponent(q)}`);
-    const matches = res.matches || [];
+    const res = await apiGet(`/api/auth/lookup-name?name=${encodeURIComponent(q)}`);
+    const matches = res.items || res.matches || [];
     if (!matches.length) {
       box.classList.add('hidden');
       return;
@@ -1117,10 +1202,11 @@ function onInputAccountName(val) {
         const kws = (r.keywords || []).slice(0, 3).join('・') || r.specialty || '';
         const encoded = encodeURIComponent(JSON.stringify(r));
         return `
-          <div class="name-suggestion-item" onclick="selectAccountResearcher('${encoded}')">
-            <div>
-              <div class="ns-name">${escapeHtml(r.name)} <span class="type-badge">${escapeHtml(r.dept_short)}</span></div>
-              <div class="ns-meta">${escapeHtml(r.department)} ${kws ? `｜ ${escapeHtml(kws)}` : ''}</div>
+          <div class="suggestion-row" onclick="selectAccountResearcher('${encoded}')">
+            <strong>${escapeHtml(r.name)}</strong>
+            <span class="type-badge" style="margin-left:6px;">${escapeHtml(r.dept_short)}</span>
+            <div style="color:#64748b;font-size:11.5px;margin-top:2px;">
+              ${escapeHtml(r.department)} ${kws ? `／ 専門：${escapeHtml(kws)}` : ''}
             </div>
           </div>
         `;
