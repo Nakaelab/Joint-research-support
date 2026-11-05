@@ -276,7 +276,7 @@ def call_deepseek(system_prompt, user_prompt, temperature=0.3):
         },
         method='POST',
     )
-    ctx = ssl.create_default_context()
+    ctx = ssl._create_unverified_context()
     try:
         with urllib.request.urlopen(req, timeout=50, context=ctx) as resp:
             body = json.loads(resp.read().decode('utf-8'))
@@ -433,25 +433,40 @@ def format_grant_row(g):
     d = dict(g)
     dl = d.get('deadline', '') or d.get('period_text', '')
     m_date = re.search(r'(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})', dl)
-    if m_date:
+    if m_date and int(m_date.group(1)) < 9000:
         y, m, day = int(m_date.group(1)), int(m_date.group(2)), int(m_date.group(3))
-        d['deadline_short'] = f'{m}/{day}'
+        d['deadline_short'] = f'{y}/{m}/{day}'
         d['deadline_full'] = f'{y}/{m:02d}/{day:02d}'
+        ym_key = f'{y:04d}-{m:02d}'
+        d['ym_key'] = ym_key
         if not d.get('internal_deadline'):
-            im, iday = (m, max(1, day - 12)) if day > 12 else (max(1, m - 1), 28 + day - 12)
-            d['internal_deadline_short'] = f'{im}/{iday}'
+            iy, im, iday = (y, m, max(1, day - 12)) if day > 12 else ((y, m - 1, 28 + day - 12) if m > 1 else (y - 1, 12, 28 + day - 12))
+            d['internal_deadline_short'] = f'{iy}/{im}/{iday}'
         else:
             d['internal_deadline_short'] = d['internal_deadline']
         if not d.get('prior_contact_deadline'):
-            pm, pday = (m, max(1, day - 19)) if day > 19 else (max(1, m - 1), 28 + day - 19)
-            d['prior_contact_short'] = f'{pm}/{pday}'
+            py, pm, pday = (y, m, max(1, day - 19)) if day > 19 else ((y, m - 1, 28 + day - 19) if m > 1 else (y - 1, 12, 28 + day - 19))
+            d['prior_contact_short'] = f'{py}/{pm}/{pday}'
         else:
             d['prior_contact_short'] = d['prior_contact_deadline']
+
+        if ym_key <= '2027-01':
+            d['season_label'] = f'直近公募（{y}年{m}月）'
+        elif ym_key <= '2027-03':
+            d['season_label'] = f'年度末・来春（{y}年{m}月）'
+        elif ym_key <= '2027-06':
+            d['season_label'] = f'来春・来年度前半（{y}年{m}月）'
+        elif ym_key <= '2027-09':
+            d['season_label'] = f'来夏・科研費時期（{y}年{m}月）'
+        else:
+            d['season_label'] = f'先々の公募（{y}年{m}月）'
     else:
-        d['deadline_short'] = d.get('period_text') or '随時'
+        d['deadline_short'] = '随時・通年' if ('9999' in dl or '随時' in (d.get('period_text') or '') or '通年' in (d.get('period_text') or '')) else (d.get('period_text') or '随時')[:18]
         d['deadline_full'] = d['deadline_short']
-        d['internal_deadline_short'] = d.get('internal_deadline') or '要確認'
-        d['prior_contact_short'] = '要確認'
+        d['internal_deadline_short'] = d.get('internal_deadline') or '随時相談'
+        d['prior_contact_short'] = '随時相談'
+        d['ym_key'] = '9999-12'
+        d['season_label'] = '随時・通年公募'
 
     amt = d.get('max_amount_yen', '')
     if amt and str(amt).isdigit() and int(amt) > 0:
@@ -466,7 +481,29 @@ def format_grant_row(g):
     return d
 
 
-def search_grants_db(query='', limit=8):
+def match_grant_period_filter(item, period_filter='all'):
+    pf = (period_filter or 'all').strip()
+    ym = item.get('ym_key', '')
+    dl = item.get('deadline', '')
+    # Always exclude expired grants before 2026-11-05
+    if dl and not dl.startswith('9999') and dl < '2026-11-05':
+        return False
+    if pf == 'near':
+        return '2026-11' <= ym <= '2027-01'
+    if pf == 'spring2027':
+        return '2027-02' <= ym <= '2027-06'
+    if pf == 'summer2027':
+        return '2027-07' <= ym <= '2027-09'
+    if pf == 'autumn2027':
+        return '2027-10' <= ym <= '2028-12'
+    if pf == 'future':
+        return '2027-02' <= ym <= '2028-12'
+    if pf == 'always':
+        return ym == '9999-12' or '随時' in (item.get('status') or '')
+    return True
+
+
+def search_grants_db(query='', period_filter='all', limit=8):
     conn = get_db()
     rows = conn.execute('SELECT * FROM grants').fetchall()
     conn.close()
@@ -475,6 +512,9 @@ def search_grants_db(query='', limit=8):
     scored = []
     for r in rows:
         item = format_grant_row(r)
+        if not match_grant_period_filter(item, period_filter):
+            continue
+
         haystack = ' '.join([
             item.get('title', ''),
             item.get('field', ''),
@@ -485,10 +525,15 @@ def search_grants_db(query='', limit=8):
         ]).lower()
 
         score = 10
-        if '研究' in (item.get('category') or '') or '助成' in (item.get('title') or ''):
+        cat_title = f"{item.get('category') or ''} {item.get('title') or ''}"
+        if any(w in cat_title for w in ('研究', '助成', '科研費', '公募', '開発')):
+            score += 18
+        if str(item.get('id', '')).startswith('fund_curated_'):
+            score += 12
+        if item.get('max_amount_yen') and str(item.get('max_amount_yen')).isdigit():
+            score += 8
+        if item.get('deadline', '') >= '2026-11-05':
             score += 15
-        if item.get('deadline', '') >= '2026-10-30':
-            score += 20
         for t in terms:
             if t in haystack:
                 score += 25
@@ -496,6 +541,32 @@ def search_grants_db(query='', limit=8):
         scored.append(item)
 
     scored.sort(key=lambda x: (x['match_score'], x.get('deadline', '')), reverse=True)
+
+    # When period_filter is 'all', ensure a balanced mix of immediate (2026/11-2027/01),
+    # spring/early FY2027 (2027/02-2027/06), and summer/autumn/2028 future grants (2027/07+)
+    if (period_filter or 'all') == 'all' and len(scored) > limit:
+        bucket_near = [x for x in scored if '2026-11' <= x.get('ym_key', '') <= '2027-01']
+        bucket_spring = [x for x in scored if '2027-02' <= x.get('ym_key', '') <= '2027-06']
+        bucket_late = [x for x in scored if '2027-07' <= x.get('ym_key', '') <= '2028-12']
+        balanced = []
+        seen_ids = set()
+        for src_bucket, quota in ((bucket_near, 3), (bucket_spring, 3), (bucket_late, 2)):
+            cnt = 0
+            for it in src_bucket:
+                if it['id'] not in seen_ids:
+                    balanced.append(it)
+                    seen_ids.add(it['id'])
+                    cnt += 1
+                    if cnt >= quota or len(balanced) >= limit:
+                        break
+        for it in scored:
+            if len(balanced) >= limit:
+                break
+            if it['id'] not in seen_ids:
+                balanced.append(it)
+                seen_ids.add(it['id'])
+        return balanced[:limit]
+
     return scored[:limit]
 
 
@@ -602,7 +673,7 @@ def generate_local_researchers(candidates, research_content, user_prof=None):
     return out
 
 
-def generate_local_grants(candidates, researchers, research_content, user_prof=None):
+def generate_local_grants(candidates, researchers, research_content, user_prof=None, limit=8):
     depts = list({r.get('dept_short', '') for r in researchers if r.get('dept_short')})
     if user_prof and user_prof.get('dept_short') and user_prof['dept_short'] not in depts:
         depts.insert(0, user_prof['dept_short'])
@@ -615,7 +686,7 @@ def generate_local_grants(candidates, researchers, research_content, user_prof=N
     kws_label = '・'.join(kws[:4]) if kws else '本研究分野'
 
     out = []
-    for g in candidates[:3]:
+    for g in candidates[:limit]:
         item = dict(g)
         field_label = item.get('field') or '対象分野'
         if len(depts) >= 2:
@@ -672,10 +743,12 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
             conn = get_db()
             likes_count = conn.execute('SELECT COUNT(*) FROM likes').fetchone()[0]
             history_count = conn.execute('SELECT COUNT(*) FROM consultation_history').fetchone()[0]
+            grants_count = conn.execute('SELECT COUNT(*) FROM grants').fetchone()[0]
             conn.close()
             return self.send_json({
                 'likes_count': likes_count,
                 'history_count': history_count,
+                'grants_count': grants_count,
             })
 
         if path == '/api/auth/lookup-name':
@@ -910,6 +983,8 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
             find_equipment = bool(body.get('find_equipment', False))
             research_content = body.get('research_content', '').strip()
             user_category = body.get('user_category', '学内')
+            grant_period = body.get('grant_period', 'all')
+            grant_limit = min(30, max(3, int(body.get('grant_limit', 8))))
             save_history = bool(body.get('save_history', True))
             user_email = body.get('user_email', '')
             user_name = body.get('user_name', '')
@@ -938,11 +1013,11 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
                 else []
             )
             g_query = combined_search_query + ' ' + ' '.join(' '.join(r.get('keywords', [])) for r in r_candidates[:4])
-            g_candidates = search_grants_db(g_query, limit=6) if find_researchers else []
+            g_candidates = search_grants_db(g_query, period_filter=grant_period, limit=grant_limit + 2) if find_researchers else []
             eq_candidates = search_equipment_db(combined_search_query, user_category=user_category, limit=6) if find_equipment else []
 
             local_r = generate_local_researchers(r_candidates, research_content, user_prof) if find_researchers else []
-            local_g = generate_local_grants(g_candidates, local_r, research_content, user_prof) if find_researchers else []
+            local_g = generate_local_grants(g_candidates, local_r, research_content, user_prof, limit=grant_limit) if find_researchers else []
             local_eq = generate_local_equipment(eq_candidates, research_content, user_prof) if find_equipment else []
 
             engine_label = 'AI推論'
@@ -952,7 +1027,7 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
                     'あなたは福井大学の研究連携サポートAIです。ログイン中の研究者自身のDB研究情報（専門・研究キーワード・研究概要）と、'
                     '今回入力された「研究内容」の両方を踏まえて、候補データの中から最適な：\n'
                     '1) 共同研究者5名（ログイン研究者とのシナジーを踏まえた役割案 proposed_role と推薦理由 ai_reason）、\n'
-                    '2) 二人以上の共同研究・分野に合う公募最大3件（推薦理由 ai_reason）、\n'
+                    f'2) 二人以上の共同研究・分野に合う公募最大{grant_limit}件（推薦理由 ai_reason）、\n'
                     '3) この研究に使える貸出機器最大4件（利用目的案 proposed_purpose と推薦理由 ai_reason）\n'
                     'をJSON形式で提案してください。\n'
                     '出力JSON形式: {\n'
@@ -972,7 +1047,7 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
                     'find_researchers': find_researchers,
                     'find_equipment': find_equipment,
                     'researcher_candidates': [{'id': r['id'], 'name': r['name'], 'dept': r['department'], 'keywords': r['keywords']} for r in r_candidates[:7]],
-                    'grant_candidates': [{'id': g['id'], 'title': g['title'], 'field': g['field'], 'agency': g['agency']} for g in g_candidates[:5]],
+                    'grant_candidates': [{'id': g['id'], 'title': g['title'], 'field': g['field'], 'agency': g['agency'], 'deadline': g['deadline_short']} for g in g_candidates[:grant_limit]],
                     'equipment_candidates': [{'id': e['id'], 'name': e['name'], 'fee': e['fee_display']} for e in eq_candidates[:6]],
                 }, ensure_ascii=False)
 
@@ -996,15 +1071,23 @@ class MatchingHandler(http.server.SimpleHTTPRequestHandler):
                     if find_researchers and isinstance(ai_res.get('grants'), list):
                         gmap = {g['id']: g for g in local_g}
                         merged_g = []
+                        seen_gids = set()
                         for item in ai_res['grants']:
                             gid = item.get('id')
-                            if gid in gmap:
+                            if gid in gmap and gid not in seen_gids:
                                 base = dict(gmap[gid])
                                 if item.get('ai_reason'):
                                     base['ai_reason'] = item['ai_reason']
                                 merged_g.append(base)
+                                seen_gids.add(gid)
+                        for g in local_g:
+                            if len(merged_g) >= grant_limit:
+                                break
+                            if g['id'] not in seen_gids:
+                                merged_g.append(g)
+                                seen_gids.add(g['id'])
                         if merged_g:
-                            local_g = merged_g[:3]
+                            local_g = merged_g[:grant_limit]
 
                     if find_equipment and isinstance(ai_res.get('equipment'), list):
                         emap = {e['id']: e for e in local_eq}

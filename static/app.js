@@ -288,8 +288,8 @@ function renderWelcomeGuide(user) {
           <p style="font-size:13.5px;color:#475569;margin-top:4px;">
             ${
               staffMode
-                ? '先生方から依頼された研究テーマやキーワードを左側の「2. 研究内容を入力」に入れて<strong>「AIで提案する」</strong>を押すと、学内の<strong>共同研究者5名・おすすめの公募3件・貸出機器</strong>をまとめて調査できます。'
-                : '左側の「2. 研究内容を入力」に相談したいテーマを入れて<strong>「AIで提案する」</strong>を押すと、福井大学内の<strong>共同研究者5名・おすすめの公募3件・貸出機器</strong>がここに表示されます。'
+                ? '先生方から依頼された研究テーマやキーワードを左側の「2. 研究内容を入力」に入れて<strong>「AIで提案する」</strong>を押すと、学内の<strong>共同研究者5名・おすすめの公募（直近〜2028年の先々の公募まで8件）・貸出機器</strong>をまとめて調査できます。'
+                : '左側の「2. 研究内容を入力」に相談したいテーマを入れて<strong>「AIで提案する」</strong>を押すと、福井大学内の<strong>共同研究者5名・おすすめの公募（直近〜2028年の先々の公募まで8件）・貸出機器</strong>がここに表示されます。'
             }
           </p>
         </div>
@@ -305,7 +305,7 @@ function renderWelcomeGuide(user) {
         <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
           <div class="history-col-title" style="color:#1e40af;">STEP 2. AIが研究者・公募・機器を提案</div>
           <div class="history-mini-item" style="margin-top:4px;">
-            福井大学DB（研究者9,588名・公募516件・貸出機器125件）から、役割案・推薦理由付きで提案します。
+            福井大学DB（研究者9,588名・公募${(state.grantsCount || 1403).toLocaleString()}件・貸出機器125件）から、2027〜2028年の先々の公募も含めて提案します。
           </div>
         </div>
         <div class="history-col-box" style="background:#f8fbff;border-color:#dbeafe;">
@@ -456,6 +456,7 @@ function mergeByKey(serverItems, localItems, keyField = 'key') {
 async function refreshStatusAndLikes() {
   try {
     const [st, likesRes] = await Promise.all([apiGet('/api/status'), apiGet('/api/likes')]);
+    if (st.grants_count) state.grantsCount = st.grants_count;
     const mergedLikes = mergeByKey(likesRes.items || [], getLocalLikes(), 'key');
     saveLocalLikes(mergedLikes);
     state.likedItems = mergedLikes;
@@ -590,6 +591,7 @@ async function runAISearch(isInitial = false) {
   const chkE = document.getElementById('chk-equipment').checked;
   const researchContent = document.getElementById('research-input').value.trim();
   const userCat = document.getElementById('eq-user-category').value;
+  const grantPeriod = document.getElementById('grant-period-filter')?.value || 'all';
 
   if (!chkR && !chkE) {
     showToast('「共同研究者＋公募を探す」または「貸出機器を探す」にチェックを入れてください');
@@ -618,6 +620,8 @@ async function runAISearch(isInitial = false) {
       find_equipment: chkE,
       research_content: researchContent,
       user_category: userCat,
+      grant_period: grantPeriod,
+      grant_limit: 8,
       save_history: !isInitial,
       user_email: state.user?.email || '',
       user_name: state.user?.name || '',
@@ -769,15 +773,19 @@ function renderGrantCard(g) {
   const key = `grant:${g.id}`;
   const isLiked = state.likedKeys.has(key);
   const encodedItem = encodeURIComponent(JSON.stringify(g));
-  const fetchedDate = (g.fetched_date || '2026-10-28').slice(0, 10).replace(/-/g, '.');
+  const fetchedDate = (g.fetched_date || '2026-11-05').slice(0, 10).replace(/-/g, '.');
+  const seasonBadge = g.season_label
+    ? `<span class="type-badge" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">🗓️ ${escapeHtml(g.season_label)}</span>`
+    : '';
 
   return `
     <div class="item-card">
       <div class="card-top-row">
         <div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <h3 style="font-size:17px;font-weight:800;">${escapeHtml(g.title)}</h3>
             <span class="type-badge">${escapeHtml(g.badge || '研究助成')}</span>
+            ${seasonBadge}
           </div>
           <div style="font-size:13px;color:#334155;font-weight:600;margin-top:3px;">
             ${escapeHtml(g.amount_display)} &nbsp;|&nbsp; 配分機関：${escapeHtml(g.agency || g.source || '要確認')}

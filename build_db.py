@@ -636,6 +636,11 @@ def build_database():
     conn.commit()
     conn.close()
     print(f'Successfully built SQLite database at {DB_PATH}')
+    try:
+        from expand_grants_db import upgrade_grants_database
+        upgrade_grants_database()
+    except Exception as e:
+        print('Warning: expand_grants_db failed:', e)
 
 
 if __name__ == '__main__':
