@@ -236,15 +236,15 @@
                       <h2 class="panel-title">📄 おすすめの公募</h2>
                       <span id="count-grants" class="count-highlight">8件</span>
                     </div>
-                    <p class="panel-subcaption">直近の公募から来春・来夏（科研費等）・2028年の先々の公募まで、時期を切り替えて探せます。</p>
+                    <p class="panel-subcaption">現在募集中の公募のみ掲載（e-Rad・科研費・大型受託研究費・Science Portal・助成財団navi・UMIN FIND）。</p>
                   </div>
                   <select id="grant-period-filter" class="form-select-sm" onchange="runAISearch(false)">
-                    <option value="all" selected>時期：すべて（直近〜2028年）</option>
-                    <option value="future">時期：先々の公募のみ（2027年2月〜2028年）</option>
+                    <option value="all" selected>表示：すべて（募集中すべて）</option>
+                    <option value="kaken_commissioned">種別：科研費・大型受託研究費（e-Rad・NEDO・JST・AMED）</option>
                     <option value="near">時期：直近の公募（2026年11月〜2027年1月）</option>
                     <option value="spring2027">時期：来春・来年度前半（2027年2月〜6月）</option>
                     <option value="summer2027">時期：来夏・科研費時期（2027年7月〜9月）</option>
-                    <option value="autumn2027">時期：来秋〜2028年（2027年10月〜2028年）</option>
+                    <option value="future">時期：先々の公募すべて（2027年2月以降）</option>
                     <option value="always">時期：随時・通年公募</option>
                   </select>
                 </div>

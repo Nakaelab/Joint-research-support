@@ -485,9 +485,15 @@ def match_grant_period_filter(item, period_filter='all'):
     pf = (period_filter or 'all').strip()
     ym = item.get('ym_key', '')
     dl = item.get('deadline', '')
-    # Always exclude expired grants before 2026-11-05
+    st = item.get('status', '')
+    # Always exclude expired or closed grants
     if dl and not dl.startswith('9999') and dl < '2026-11-05':
         return False
+    if '締切済' in st or '終了' in st:
+        return False
+    if pf == 'kaken_commissioned':
+        cat_src = f"{item.get('category') or ''} {item.get('source') or ''} {item.get('title') or ''}"
+        return any(k in cat_src for k in ('科研費', '受託', '委託', 'e-Rad', 'NEDO', 'JST', 'AMED'))
     if pf == 'near':
         return '2026-11' <= ym <= '2027-01'
     if pf == 'spring2027':
@@ -499,7 +505,7 @@ def match_grant_period_filter(item, period_filter='all'):
     if pf == 'future':
         return '2027-02' <= ym <= '2028-12'
     if pf == 'always':
-        return ym == '9999-12' or '随時' in (item.get('status') or '')
+        return ym == '9999-12' or '随時' in st
     return True
 
 
@@ -526,10 +532,12 @@ def search_grants_db(query='', period_filter='all', limit=8):
 
         score = 10
         cat_title = f"{item.get('category') or ''} {item.get('title') or ''}"
-        if any(w in cat_title for w in ('研究', '助成', '科研費', '公募', '開発')):
+        if any(w in cat_title for w in ('研究', '助成', '科研費', '受託', '委託', '公募', '開発')):
             score += 18
+        if any(w in cat_title for w in ('科研費', '受託', '委託')):
+            score += 10
         if str(item.get('id', '')).startswith('fund_curated_'):
-            score += 12
+            score += 10
         if item.get('max_amount_yen') and str(item.get('max_amount_yen')).isdigit():
             score += 8
         if item.get('deadline', '') >= '2026-11-05':
@@ -542,15 +550,18 @@ def search_grants_db(query='', period_filter='all', limit=8):
 
     scored.sort(key=lambda x: (x['match_score'], x.get('deadline', '')), reverse=True)
 
-    # When period_filter is 'all', ensure a balanced mix of immediate (2026/11-2027/01),
-    # spring/early FY2027 (2027/02-2027/06), and summer/autumn/2028 future grants (2027/07+)
+    # When period_filter is 'all', ensure a balanced mix of KAKENHI/Large Commissioned Funds
+    # and immediate/upcoming foundation & portal grants
     if (period_filter or 'all') == 'all' and len(scored) > limit:
+        bucket_kaken_comm = [
+            x for x in scored
+            if any(k in f"{x.get('category','')} {x.get('title','')}" for k in ('科研費', '受託', '委託'))
+        ]
         bucket_near = [x for x in scored if '2026-11' <= x.get('ym_key', '') <= '2027-01']
-        bucket_spring = [x for x in scored if '2027-02' <= x.get('ym_key', '') <= '2027-06']
-        bucket_late = [x for x in scored if '2027-07' <= x.get('ym_key', '') <= '2028-12']
+        bucket_spring_late = [x for x in scored if '2027-02' <= x.get('ym_key', '') <= '2028-12']
         balanced = []
         seen_ids = set()
-        for src_bucket, quota in ((bucket_near, 3), (bucket_spring, 3), (bucket_late, 2)):
+        for src_bucket, quota in ((bucket_kaken_comm, 4), (bucket_near, 3), (bucket_spring_late, 3)):
             cnt = 0
             for it in src_bucket:
                 if it['id'] not in seen_ids:
